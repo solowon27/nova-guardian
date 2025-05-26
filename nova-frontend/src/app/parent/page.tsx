@@ -440,7 +440,7 @@ export default function ParentDashboard() {
             <button
               onClick={() => {
                 // Changed this line: Added optional chaining for childrenData.getMyChildren
-                if (childrenData?.getMyChildren?.length > 0) {
+                if (childrenData && Array.isArray(childrenData.getMyChildren) && childrenData.getMyChildren.length > 0) {
                   handleSelectChild(childrenData.getMyChildren[0]);
                 } else {
                   router.push('/parent/add-child');
