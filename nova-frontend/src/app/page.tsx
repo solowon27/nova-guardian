@@ -32,9 +32,10 @@ const faqs = [
 
 export default function HomePage() {
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
-  const [openFaqIndex, setOpenFaqIndex] = useState(null); // State for FAQ accordion
+  // THE FIX IS HERE: Explicitly define the type for useState
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null); // This line needs to be exactly like this
 
-   useEffect(() => {
+  useEffect(() => {
     const intervalId = setInterval(() => {
       setCurrentTestimonial((prev) => (prev + 1) % testimonials.length);
     }, 6000); // Change testimonial every 6 seconds
@@ -42,8 +43,7 @@ export default function HomePage() {
     return () => clearInterval(intervalId); // Cleanup on unmount
   }, []);
 
-  // Ensure 'index' parameter is typed as a number
-  const toggleFaq = (index: number) => {
+  const toggleFaq = (index: number) => { // Good to type 'index' parameter as well
     setOpenFaqIndex(openFaqIndex === index ? null : index);
   };
 
@@ -126,7 +126,7 @@ export default function HomePage() {
               src={testimonials[currentTestimonial].image}
               alt={testimonials[currentTestimonial].name}
               className="absolute -top-10 left-1/2 transform -translate-x-1/2 w-28 h-28 rounded-full border-6 border-white shadow-lg object-cover"
-              onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/100x100/A78BFA/FFFFFF?text=User"; }} // Fallback image
+              // Removed onError handler as per our discussion
             />
             <blockquote className="text-xl md:text-2xl italic text-gray-700 mt-10 mb-6 leading-relaxed">
               {`"${testimonials[currentTestimonial].quote}"`}
