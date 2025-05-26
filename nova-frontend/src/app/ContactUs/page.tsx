@@ -12,18 +12,18 @@ export default function ContactUs() {
     message: '',
   });
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const { name, value } = e.target;
+  setFormData((prev) => ({ ...prev, [name]: value }));
+};
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // In a real application, you would send this data to your backend
-    console.log('Form submitted:', formData);
-    alert('Thank you for your message! We will get back to you shortly.');
-    setFormData({ name: '', email: '', subject: '', message: '' }); // Clear form
-  };
+const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  console.log('Form submitted:', formData);
+  alert('Thank you for your message! We will get back to you shortly.');
+  setFormData({ name: '', email: '', subject: '', message: '' });
+};
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 font-sans text-gray-800 flex items-center justify-center py-16">
