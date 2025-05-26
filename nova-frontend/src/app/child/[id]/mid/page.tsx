@@ -13,6 +13,46 @@ import { GET_CHILD_BY_ID } from '@/graphql/queries';
 import { GET_MY_ASSIGNMENTS } from '@/graphql/queries';
 import { UPDATE_ASSIGNMENT_STATUS, UPDATE_CHILD_XP, ADD_CHILD_BADGE } from '@/graphql/mutations';
 
+// --- Type Definitions (Added for better type safety) ---
+interface Child {
+  id: string;
+  name: string;
+  age: number;
+  xp: number;
+  badges: string[];
+}
+
+interface Question {
+  prompt: string;
+  type: 'EXPLAIN' | 'SHORT_ANSWER' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+  options?: string[]; // Optional for non-multiple choice
+}
+
+interface Assignment {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  status: 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED';
+  questions: Question[];
+  feedback?: string;
+}
+
+interface GetChildByIdData {
+  getChildById: Child;
+}
+
+interface GetMyAssignmentsData {
+  getMyAssignments: Assignment[];
+}
+
+interface GetFunImageData {
+  getFunImage: {
+    imageUrl: string;
+    explanation: string;
+  };
+}
+
 // --- END Mock GraphQL operations ---
 
 
@@ -21,7 +61,7 @@ export default function MidDashboard() {
   const childId = typeof id === 'string' ? id : '';
 
   // --- Data Fetching ---
-  const { data: childData, loading: childLoading, error: childError } = useQuery(GET_CHILD_BY_ID, {
+  const { data: childData, loading: childLoading, error: childError } = useQuery<GetChildByIdData>(GET_CHILD_BY_ID, {
     variables: { id: childId },
     skip: !childId,
   });
@@ -31,7 +71,7 @@ export default function MidDashboard() {
     loading: assignmentsLoading,
     error: assignmentsError,
     refetch,
-  } = useQuery(GET_MY_ASSIGNMENTS);
+  } = useQuery<GetMyAssignmentsData>(GET_MY_ASSIGNMENTS);
 
   const assignments = assignmentsData?.getMyAssignments ?? [];
 
@@ -40,23 +80,24 @@ export default function MidDashboard() {
   const [updateChildXP] = useMutation(UPDATE_CHILD_XP); // Still used for general XP updates
   const [addChildBadge] = useMutation(ADD_CHILD_BADGE); // Still used for general badge updates
 
-  const { loading: imageLoading, data: imageData, error: imageError } = useQuery(GET_FUN_IMAGE);
+  const { loading: imageLoading, data: imageData, error: imageError } = useQuery<GetFunImageData>(GET_FUN_IMAGE);
 
   // --- Component State ---
-  const [answers, setAnswers] = useState({}); // For assignment text/radio answers
-  const [inProgress, setInProgress] = useState({}); // To track if an assignment is being worked on
+  const [answers, setAnswers] = useState<Record<string, string>>({}); // For assignment text/radio answers
+  const [inProgress, setInProgress] = useState<Record<string, boolean>>({}); // To track if an assignment is being worked on
 
   // Profile Specific States - Keeping minimal necessary for subtle effects
   const [previousXp, setPreviousXp] = useState(0); // To trigger XP animation on change
 
   // --- Handlers ---
-  const handleInputChange = (assignmentQuestionId, value) => {
+  const handleInputChange = (assignmentQuestionId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [assignmentQuestionId]: value }));
     const assignmentId = assignmentQuestionId.split('-')[0];
     setInProgress(prev => ({ ...prev, [assignmentId]: true }));
   };
 
-  const handleSubmitAnswer = async (assignment) => {
+
+  const handleSubmitAnswer = async (assignment: Assignment) => { // Explicitly type 'assignment'
     const responsePayload = assignment.questions.map((q, index) => ({
       questionIndex: index,
       answer: answers[`${assignment.id}-${index}`] || '',
@@ -65,11 +106,17 @@ export default function MidDashboard() {
     const allQuestionsAnswered = responsePayload.every(res => res.answer.trim() !== '');
 
     if (!allQuestionsAnswered && assignment.questions.length > 0) {
-      // Replaced alert with a more visually integrated message if a custom modal is implemented
-      // For now, sticking to alert as per existing code structure
       alert('Please answer all questions before submitting.');
       return;
     }
+
+    // Ensure child data is available before proceeding
+    if (!childData?.getChildById) {
+      alert('Child data not loaded. Cannot submit assignment.');
+      return;
+    }
+
+    const child = childData.getChildById; // Now 'child' is guaranteed to exist and be typed
 
     try {
       await updateStatus({
@@ -96,7 +143,12 @@ export default function MidDashboard() {
 
       // Example: Award a badge for completing their first assignment
       const completedAssignmentsCount = assignments.filter(a => a.status === 'COMPLETED').length;
-      if (completedAssignmentsCount === 0) { // If this was truly their first completed assignment
+      // This logic checks if 'completedAssignmentsCount' was 0 *before* this submission
+      // which is tricky with `refetch` being asynchronous.
+      // A more robust check might involve checking the current child's badges or
+      // passing the *previous* state of completed assignments.
+      // For simplicity and to match the original intent, we'll keep it as is for now.
+      if (completedAssignmentsCount === 0) {
         await addChildBadge({ variables: { childId: child.id, badge: 'First Task Challenger' } });
         alert('🎉 You earned a new badge: First Task Challenger!');
       }
@@ -122,7 +174,7 @@ export default function MidDashboard() {
   }, [childData?.getChildById?.xp, previousXp]);
 
   // Helper function for badge props (simplified, no need for dynamic icons if you just want text)
-  const getBadgeClass = (badgeName) => {
+  const getBadgeClass = (badgeName: string) => { // Explicitly type 'badgeName'
     switch (badgeName) {
       case '🌟 Star Student': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case '📖 Avid Reader': return 'bg-green-100 text-green-800 border-green-200';
@@ -170,8 +222,19 @@ export default function MidDashboard() {
   }
 
   // --- Child Profile Calculations ---
+  // Ensure child is not null before destructuring or accessing properties
   const child = childData?.getChildById;
-  const xp = child?.xp || 0;
+  if (!child) {
+    // This case should ideally be caught by the childError check,
+    // but as a fallback, we can render a simple message or redirect.
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-red-50">
+        <p className="text-red-700">Child profile not found.</p>
+      </div>
+    );
+  }
+
+  const xp = child.xp || 0;
   const levelThreshold = 50; // XP needed for each level
   const level = Math.floor(xp / levelThreshold);
   const xpForCurrentLevel = xp % levelThreshold;
@@ -198,7 +261,7 @@ export default function MidDashboard() {
           {/* 🎯 Avatar Placement */}
           <div className="absolute top-0 right-8 transform -translate-y-1/2 z-10">
             <img
-              src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(child?.name || 'explorer')}&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf`}
+              src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(child.name || 'explorer')}&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf`}
               alt="Child Avatar"
               className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-6 border-white shadow-xl object-cover animate-bounce-subtle"
             />
@@ -207,10 +270,10 @@ export default function MidDashboard() {
           <div className="relative z-10 text-left"> {/* Align content to left */}
             {/* 👋 Greeting */}
             <h1 className="text-4xl sm:text-5xl font-extrabold text-indigo-800 mb-3 drop-shadow-md">
-              Hey, <span className="text-blue-600 font-bold">{child?.name || 'Explorer'}!</span> 👋
+              Hey, <span className="text-blue-600 font-bold">{child.name || 'Explorer'}!</span> 👋
             </h1>
             <p className="text-lg text-gray-700 mb-6">
-              Age: <span className="font-semibold text-blue-700">{child?.age || 'N/A'}</span>
+              Age: <span className="font-semibold text-blue-700">{child.age || 'N/A'}</span>
             </p>
 
             {/* 🚀 Progress Bar */}
@@ -233,7 +296,7 @@ export default function MidDashboard() {
             </div>
 
             {/* 🏅 Badges */}
-            {child?.badges?.length > 0 && (
+            {child.badges?.length > 0 && (
               <div className="mt-6 p-4 bg-yellow-50 rounded-xl shadow-inner border border-yellow-200">
                 <h2 className="text-xl font-bold text-yellow-800 mb-3 flex items-center">
                   <span className="mr-2 text-2xl">🏅</span> Your Badges
@@ -335,7 +398,7 @@ export default function MidDashboard() {
                                 />
                               ) : null}
 
-                              {q.type === 'MULTIPLE_CHOICE' && (
+                              {q.type === 'MULTIPLE_CHOICE' && q.options && ( // Ensure options exist
                                 <div className="space-y-2">
                                   {q.options.map((opt, optIndex) => (
                                     <label key={optIndex} className="flex items-center p-2 rounded-md cursor-pointer hover:bg-blue-100 transition-colors duration-200">
@@ -427,7 +490,7 @@ export default function MidDashboard() {
                     src={imageData.getFunImage.imageUrl}
                     alt="AI Generated Learning Image"
                     className="mx-auto rounded-xl shadow-lg w-full max-w-sm sm:max-w-md object-cover border-2 border-indigo-300 transform hover:scale-[1.02] transition-transform duration-300"
-                    onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/400x300/a78bfa/ffffff?text=Image+Error"; }} // Fallback
+                    onError={(e) => { e.target.onerror = null; (e.target as HTMLImageElement).src="https://placehold.co/400x300/a78bfa/ffffff?text=Image+Error"; }} // Fallback
                   />
                   <p className="text-lg text-gray-700 mt-6 leading-relaxed p-4 bg-indigo-50 rounded-xl shadow-inner border border-indigo-100">
                     <span className="font-semibold text-indigo-800">Explanation:</span> {imageData.getFunImage.explanation}
@@ -435,12 +498,11 @@ export default function MidDashboard() {
                 </div>
               )}
               {imageError && (
-                 <p className="text-red-600 text-center p-4 bg-red-50 rounded-lg border border-red-200">Error loading image: {imageError.message}. Please try again later.</p>
-              )}
+                   <p className="text-red-600 text-center p-4 bg-red-50 rounded-lg border border-red-200">Error loading image: {imageError.message}. Please try again later.</p>
+               )}
             </section>
 
             {/* Science Puzzle Section - (Assuming this component is self-contained) */}
-            {/* I'm adding a placeholder section for it to fit into the new design */}
             <section className="bg-white rounded-3xl shadow-2xl p-8 border-4 border-green-200 animate-fade-in-up delay-400">
               <h2 className="text-3xl sm:text-4xl font-extrabold text-green-700 mb-8 flex items-center">
                 <span className="mr-4 text-4xl">🔬</span> Science Puzzle Challenge
@@ -449,7 +511,7 @@ export default function MidDashboard() {
                 Dive into an exciting science puzzle to test your knowledge and earn extra XP!
               </p>
               {/* This is where your actual SciencePuzzleSection component would render */}
-              <SciencePuzzleSection /> 
+              <SciencePuzzleSection />
               <div className="bg-green-50 p-6 rounded-xl border border-green-200 shadow-inner text-center text-gray-600 italic">
                 [Science Puzzle Component Renders Here]
                 <p className="mt-4 text-sm">

@@ -1,47 +1,122 @@
 'use client';
 
 import { gql, useMutation, useQuery } from '@apollo/client';
-import { useRouter } from 'next/navigation'; // Keep next/navigation as per original
+import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
-// --- GraphQL Queries and Mutations (UNCHANGED) ---
-
+// --- GraphQL Queries and Mutations (UNCHANGED, assuming these are properly defined elsewhere) ---
 import { GET_PARENT_NOTIFICATIONS } from '@/graphql/queries';
 import { GET_CHILDREN } from '@/graphql/queries';
-import { GET_ASSIGNMENTS_FOR_CHILD } from '@/graphql/queries';  
+import { GET_ASSIGNMENTS_FOR_CHILD } from '@/graphql/queries';
 import { CREATE_ASSIGNMENT, UPDATE_ASSIGNMENT_FEEDBACK } from '@/graphql/mutations';
 
+// --- TypeScript Interfaces ---
+
+// Define possible question types
+type QuestionType = 'EXPLAIN' | 'SHORT_ANSWER' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
+type AssignmentStatus = 'COMPLETED' | 'IN_PROGRESS' | 'NEW';
+
+interface Child {
+  id: string;
+  _id?: string; // Add _id for flexibility if your backend uses it
+  name: string;
+  age: number;
+  // Add other child properties if they exist in your GraphQL schema
+}
+
+interface Notification {
+  message: string;
+  date: string | Date; // Date can be string from API, convert to Date object
+  // Add other notification properties if they exist
+}
+
+interface Question {
+  type: QuestionType;
+  prompt: string;
+  options?: string[]; // Optional for non-multiple choice questions
+  answer?: string; // Optional, for auto-grading/reference
+}
+
+interface Response {
+  questionIndex: number;
+  answer: string;
+  // Add other response properties if they exist
+}
+
+interface Assignment {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: Difficulty;
+  status: AssignmentStatus;
+  questions: Question[];
+  responses: Response[]; // Array of child's responses to questions
+  feedback?: string; // Optional feedback from parent
+  // Add other assignment properties if they exist
+}
+
+interface GetChildrenData {
+  getMyChildren?: Child[]; // Make it optional as it might be undefined if data hasn't arrived
+}
+
+interface GetParentNotificationsData {
+  getParentNotifications?: Notification[]; // Make it optional
+}
+
+interface GetAssignmentsForChildData {
+  getAssignmentsForChild?: Assignment[]; // Make it optional
+}
+
+// Define the shape of variables for createAssignment mutation
+interface CreateAssignmentVariables {
+  childId: string;
+  title: string;
+  description: string;
+  questions: Question[];
+  difficulty: Difficulty;
+}
+
+// Define the shape of variables for updateAssignmentFeedback mutation
+interface UpdateAssignmentFeedbackVariables {
+  assignmentId: string;
+  feedback: string;
+}
 
 export default function ParentDashboard() {
   const router = useRouter();
-  const [selectedChild, setSelectedChild] = useState(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [difficulty, setDifficulty] = useState('EASY'); // New state for difficulty
-  const [questions, setQuestions] = useState([]);
-  const [feedbackMap, setFeedbackMap] = useState({});
-  const [showAllNotifications, setShowAllNotifications] = useState(false);
+  // Explicitly type useState hooks
+  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
+  const [title, setTitle] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
+  const [difficulty, setDifficulty] = useState<Difficulty>('EASY');
+  const [questions, setQuestions] = useState<Question[]>([]);
+  // feedbackMap can store feedback for multiple assignments by their ID
+  const [feedbackMap, setFeedbackMap] = useState<{ [key: string]: string }>({});
+  const [showAllNotifications, setShowAllNotifications] = useState<boolean>(false);
 
   // --- Data Fetching ---
-  const { data: childrenData, loading: childrenLoading, error: childrenError } = useQuery(GET_CHILDREN);
+  // Apply interfaces to useQuery hooks
+  const { data: childrenData, loading: childrenLoading, error: childrenError } = useQuery<GetChildrenData>(GET_CHILDREN);
 
-  const { data: inboxData, refetch: refetchNotifications } = useQuery(
+  const { data: inboxData, refetch: refetchNotifications } = useQuery<GetParentNotificationsData>(
     GET_PARENT_NOTIFICATIONS,
     {
       variables: { limit: showAllNotifications ? null : 5 }
     }
   );
 
-  const { data: assignmentsData, refetch: refetchAssignments, loading: assignmentsLoading } = useQuery(GET_ASSIGNMENTS_FOR_CHILD, {
+  const { data: assignmentsData, refetch: refetchAssignments, loading: assignmentsLoading } = useQuery<GetAssignmentsForChildData>(GET_ASSIGNMENTS_FOR_CHILD, {
     variables: {
-      childId: selectedChild?.id || selectedChild?._id || ''
+      childId: selectedChild?.id || selectedChild?._id || '' // Safely access id or _id
     },
     skip: !selectedChild,
   });
 
   // --- Mutations ---
-  const [createAssignment] = useMutation(CREATE_ASSIGNMENT);
-  const [updateFeedback] = useMutation(UPDATE_ASSIGNMENT_FEEDBACK);
+  // Apply interfaces to useMutation hooks
+  const [createAssignment] = useMutation<any, CreateAssignmentVariables>(CREATE_ASSIGNMENT);
+  const [updateFeedback] = useMutation<any, UpdateAssignmentFeedbackVariables>(UPDATE_ASSIGNMENT_FEEDBACK);
 
 
   // --- Effects ---
@@ -52,11 +127,11 @@ export default function ParentDashboard() {
   }, [selectedChild, refetchAssignments]);
 
   // --- Handlers ---
-  const handleSelectChild = (child) => {
+  const handleSelectChild = (child: Child) => { // Type the 'child' parameter
     setSelectedChild(child);
     setTitle('');
     setDescription('');
-    setDifficulty('EASY'); // Reset difficulty on child change
+    setDifficulty('EASY');
     setQuestions([]);
     setFeedbackMap({}); // Clear feedback map for new child
   };
@@ -65,70 +140,88 @@ export default function ParentDashboard() {
     setQuestions([...questions, { type: 'EXPLAIN', prompt: '', options: [''], answer: '' }]);
   };
 
-  const handleQuestionChange = (index, field, value) => {
+  const handleQuestionChange = (index: number, field: keyof Question, value: string) => { // Type parameters
     const updated = [...questions];
-    updated[index][field] = value;
-    setQuestions(updated);
-  };
-
-  const handleOptionChange = (qIndex, oIndex, value) => {
-    const updated = [...questions];
-    updated[qIndex].options[oIndex] = value;
-    setQuestions(updated);
-  };
-
-  const handleAddOption = (qIndex) => {
-    const updated = [...questions];
-    updated[qIndex].options.push('');
-    setQuestions(updated);
-  };
-
-  const handleDeleteQuestion = (indexToDelete) => {
-    setQuestions(questions.filter((_, i) => i !== indexToDelete));
-  };
-
-  const handleDeleteOption = (qIndex, oIndexToDelete) => {
-    const updated = [...questions];
-    updated[qIndex].options = updated[qIndex].options.filter((_, i) => i !== oIndexToDelete);
-    if (updated[qIndex].options.length === 0 && (updated[qIndex].type === 'MULTIPLE_CHOICE' || updated[qIndex].type === 'TRUE_FALSE')) {
-        updated[qIndex].options.push(''); // Ensure at least one empty option remains
+    // Ensure that 'field' is a valid key of Question and type compatibility
+    if (field === 'type') {
+      updated[index].type = value as QuestionType;
+    } else if (field === 'prompt') {
+      updated[index].prompt = value;
+    } else if (field === 'answer') {
+      updated[index].answer = value;
+    } else if (field === 'options') {
+      // This path should ideally not be hit if options are handled by handleOptionChange
+      // but if it were, you'd need careful type handling for array assignments.
+      // For now, assuming options are modified via handleOptionChange
     }
     setQuestions(updated);
   };
 
+  const handleOptionChange = (qIndex: number, oIndex: number, value: string) => { // Type parameters
+    const updated = [...questions];
+    if (updated[qIndex].options) { // Ensure options array exists
+      updated[qIndex].options![oIndex] = value; // Use non-null assertion since we checked
+    }
+    setQuestions(updated);
+  };
 
-  const handleSubmit = async (e) => {
+  const handleAddOption = (qIndex: number) => { // Type parameter
+    const updated = [...questions];
+    if (!updated[qIndex].options) {
+      updated[qIndex].options = []; // Initialize if it doesn't exist
+    }
+    updated[qIndex].options!.push('');
+    setQuestions(updated);
+  };
+
+  const handleDeleteQuestion = (indexToDelete: number) => { // Type parameter
+    setQuestions(questions.filter((_, i) => i !== indexToDelete));
+  };
+
+  const handleDeleteOption = (qIndex: number, oIndexToDelete: number) => { // Type parameters
+    const updated = [...questions];
+    if (updated[qIndex].options) { // Ensure options array exists
+      updated[qIndex].options = updated[qIndex].options!.filter((_, i) => i !== oIndexToDelete);
+      // Ensure at least one empty option remains for MC/TF if all are deleted
+      if (updated[qIndex].options!.length === 0 && (updated[qIndex].type === 'MULTIPLE_CHOICE' || updated[qIndex].type === 'TRUE_FALSE')) {
+        updated[qIndex].options!.push('');
+      }
+    }
+    setQuestions(updated);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => { // Type the event
     e.preventDefault();
     if (!selectedChild) {
       alert('Please select a child first!');
       return;
     }
     if (!title.trim() || !description.trim()) {
-        alert('Please provide a title and description for the assignment.');
-        return;
+      alert('Please provide a title and description for the assignment.');
+      return;
     }
     if (questions.length === 0) {
-        alert('Please add at least one question to the assignment.');
-        return;
+      alert('Please add at least one question to the assignment.');
+      return;
     }
     // Basic validation for questions (can be expanded)
     for (const q of questions) {
-        if (!q.prompt.trim()) {
-            alert('All questions must have a prompt.');
-            return;
-        }
-        if ((q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') && q.options.some(opt => !opt.trim())) {
-            alert('All options for multiple choice/true-false questions must be filled.');
-            return;
-        }
-        if ((q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') && q.options.length < 2) {
-            alert('Multiple choice and True/False questions need at least two options.');
-            return;
-        }
+      if (!q.prompt.trim()) {
+        alert('All questions must have a prompt.');
+        return;
+      }
+      if ((q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') && q.options && q.options.some(opt => !opt.trim())) {
+        alert('All options for multiple choice/true-false questions must be filled.');
+        return;
+      }
+      if ((q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') && (!q.options || q.options.length < 2)) {
+        alert('Multiple choice and True/False questions need at least two options.');
+        return;
+      }
     }
 
-
     try {
+      // Ensure selectedChild.id is used and exists
       await createAssignment({
         variables: { childId: selectedChild.id, title, description, questions, difficulty },
       });
@@ -138,35 +231,34 @@ export default function ParentDashboard() {
       setDifficulty('EASY');
       setQuestions([]);
       refetchAssignments();
-    } catch (err) {
+    } catch (err: any) { // Type the error
       console.error('Error creating assignment:', err);
       alert(`Failed to create assignment: ${err.message}`);
     }
   };
 
-  const handleFeedbackChange = (id, value) => {
+  const handleFeedbackChange = (id: string, value: string) => { // Type parameters
     setFeedbackMap((prev) => ({ ...prev, [id]: value }));
   };
 
-  const submitFeedback = async (assignmentId) => {
+  const submitFeedback = async (assignmentId: string) => { // Type parameter
     const feedbackText = feedbackMap[assignmentId];
     if (!feedbackText || feedbackText.trim() === '') {
-        alert('Feedback cannot be empty!');
-        return;
+      alert('Feedback cannot be empty!');
+      return;
     }
     try {
       await updateFeedback({
         variables: { assignmentId, feedback: feedbackText },
       });
       alert('📝 Feedback submitted!');
-      // Update the local state or refetch to show the submitted feedback
       refetchAssignments();
       setFeedbackMap(prev => {
-        const newMap = {...prev};
-        delete newMap[assignmentId]; // Clear the feedback from input after submission
+        const newMap = { ...prev };
+        delete newMap[assignmentId];
         return newMap;
       });
-    } catch (err) {
+    } catch (err: any) { // Type the error
       console.error('Error submitting feedback:', err);
       alert(`Failed to submit feedback: ${err.message}`);
     }
@@ -174,6 +266,7 @@ export default function ParentDashboard() {
 
   // --- UI Calculations ---
   const assignmentProgress = (() => {
+    // Safely check for data and array length
     if (!assignmentsData?.getAssignmentsForChild?.length) return 0;
     const total = assignmentsData.getAssignmentsForChild.length;
     const completed = assignmentsData.getAssignmentsForChild.filter((a) => a.status === 'COMPLETED').length;
@@ -228,6 +321,7 @@ export default function ParentDashboard() {
           <h3 className="text-2xl font-bold text-gray-800 mb-5 flex items-center">
             <span className="mr-3 text-blue-500 text-3xl">👨‍👧‍👦</span> Your Little Learners
           </h3>
+          {/* Changed this line: Added optional chaining for childrenData.getMyChildren */}
           {childrenData?.getMyChildren?.length === 0 ? (
             <div className="text-gray-500 italic p-4 bg-blue-50 rounded-xl text-center border border-blue-200 shadow-sm">
               <p className="mb-2">No children added yet.</p>
@@ -240,13 +334,13 @@ export default function ParentDashboard() {
             </div>
           ) : (
             <ul className="space-y-4">
-              {childrenData.getMyChildren.map((child) => (
+              {/* Ensure childrenData and getMyChildren are not null/undefined */}
+              {childrenData?.getMyChildren?.map((child: Child) => ( // Type 'child' here
                 <li
                   key={child.id}
                   className={`p-4 rounded-xl cursor-pointer transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg flex items-center ${selectedChild?.id === child.id ? 'bg-blue-600 text-white shadow-xl border border-blue-700' : 'bg-blue-100 text-blue-800 hover:bg-blue-200 border border-blue-150'}`}
                   onClick={() => handleSelectChild(child)}
                 >
-                  {/* Child Avatar Placeholder */}
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold mr-4 ${selectedChild?.id === child.id ? 'bg-blue-300' : 'bg-blue-400'}`}>
                     {child.name.charAt(0).toUpperCase()}
                   </div>
@@ -273,6 +367,7 @@ export default function ParentDashboard() {
           <h3 className="text-2xl font-bold text-gray-800 mb-5 flex items-center">
             <span className="mr-3 text-purple-500 text-3xl">💌</span> Notifications
           </h3>
+          {/* Changed this line: Added optional chaining for inboxData.getParentNotifications */}
           {!inboxData?.getParentNotifications?.length ? (
             <p className="text-gray-500 italic p-3 bg-purple-50 rounded-lg text-center border border-purple-200 shadow-sm">
               No new updates from your kids yet.
@@ -280,7 +375,8 @@ export default function ParentDashboard() {
           ) : (
             <>
               <ul className="space-y-3 text-sm text-gray-700 max-h-60 overflow-y-auto custom-scrollbar pr-2">
-                {inboxData.getParentNotifications.map((log, idx) => {
+                {/* Ensure inboxData and getParentNotifications are not null/undefined */}
+                {inboxData?.getParentNotifications?.map((log: Notification, idx: number) => { // Type 'log' here
                   const date = log.date instanceof Date ? log.date : new Date(log.date);
                   return (
                     <li key={idx} className="pb-3 border-b border-gray-100 last:border-b-0">
@@ -334,28 +430,28 @@ export default function ParentDashboard() {
         </header>
 
         {!selectedChild && (
-            <div className="bg-blue-100 p-10 rounded-2xl shadow-2xl text-center border-2 border-blue-300 animate-fade-in-up">
-                <p className="text-3xl font-extrabold text-blue-800 mb-4">
-                    👋 Welcome to Your NovaGuardian Dashboard!
-                </p>
-                <p className="text-lg text-blue-700 mb-6">
-                    Let's get started. Select a child from the left sidebar to dive into their assignments, or create new learning adventures.
-                </p>
-                <button
-                    onClick={() => {
-                        // Optionally auto-select the first child if available
-                        if (childrenData?.getMyChildren?.length > 0) {
-                            handleSelectChild(childrenData.getMyChildren[0]);
-                        } else {
-                            router.push('/parent/add-child');
-                        }
-                    }}
-                    className="mt-6 px-10 py-5 bg-purple-600 text-white text-xl font-bold rounded-full shadow-lg hover:bg-purple-700 transition-all duration-300 transform hover:scale-105 flex items-center justify-center mx-auto"
-                >
-                    {childrenData?.getMyChildren?.length > 0 ? 'View First Child\'s Profile' : 'Add Your First Child!'}
-                    <span className="ml-3 text-2xl">➡️</span>
-                </button>
-            </div>
+          <div className="bg-blue-100 p-10 rounded-2xl shadow-2xl text-center border-2 border-blue-300 animate-fade-in-up">
+            <p className="text-3xl font-extrabold text-blue-800 mb-4">
+              👋 Welcome to Your NovaGuardian Dashboard!
+            </p>
+            <p className="text-lg text-blue-700 mb-6">
+              Let's get started. Select a child from the left sidebar to dive into their assignments, or create new learning adventures.
+            </p>
+            <button
+              onClick={() => {
+                // Changed this line: Added optional chaining for childrenData.getMyChildren
+                if (childrenData?.getMyChildren?.length > 0) {
+                  handleSelectChild(childrenData.getMyChildren[0]);
+                } else {
+                  router.push('/parent/add-child');
+                }
+              }}
+              className="mt-6 px-10 py-5 bg-purple-600 text-white text-xl font-bold rounded-full shadow-lg hover:bg-purple-700 transition-all duration-300 transform hover:scale-105 flex items-center justify-center mx-auto"
+            >
+              {childrenData?.getMyChildren?.length > 0 ? 'View First Child\'s Profile' : 'Add Your First Child!'}
+              <span className="ml-3 text-2xl">➡️</span>
+            </button>
+          </div>
         )}
 
         {selectedChild && (
@@ -392,17 +488,17 @@ export default function ParentDashboard() {
                 </div>
 
                 <div>
-                    <label htmlFor="difficulty" className="block text-lg font-semibold text-gray-700 mb-2">Difficulty</label>
-                    <select
-                        id="difficulty"
-                        value={difficulty}
-                        onChange={(e) => setDifficulty(e.target.value)}
-                        className="w-full border border-gray-300 rounded-xl p-3 text-base focus:ring-purple-400 focus:border-purple-400 transition-all duration-200 bg-white shadow-sm appearance-none"
-                    >
-                        <option value="EASY">Easy (🟢)</option>
-                        <option value="MEDIUM">Medium (🟡)</option>
-                        <option value="HARD">Hard (🔴)</option>
-                    </select>
+                  <label htmlFor="difficulty" className="block text-lg font-semibold text-gray-700 mb-2">Difficulty</label>
+                  <select
+                    id="difficulty"
+                    value={difficulty}
+                    onChange={(e) => setDifficulty(e.target.value as Difficulty)} // Cast value to Difficulty
+                    className="w-full border border-gray-300 rounded-xl p-3 text-base focus:ring-purple-400 focus:border-purple-400 transition-all duration-200 bg-white shadow-sm appearance-none"
+                  >
+                    <option value="EASY">Easy (🟢)</option>
+                    <option value="MEDIUM">Medium (🟡)</option>
+                    <option value="HARD">Hard (🔴)</option>
+                  </select>
                 </div>
 
                 <div className="space-y-6">
@@ -446,7 +542,7 @@ export default function ParentDashboard() {
                       {(q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') && (
                         <div className="space-y-3 p-4 bg-white rounded-xl border border-gray-200 shadow-inner">
                           <h4 className="text-lg font-bold text-gray-700 mb-2">Options:</h4>
-                          {q.options.map((opt, oIdx) => (
+                          {q.options?.map((opt, oIdx) => ( // Safely access q.options
                             <div key={oIdx} className="flex items-center gap-2">
                               <input
                                 type="text"
@@ -456,7 +552,7 @@ export default function ParentDashboard() {
                                 className="flex-grow border border-gray-300 rounded-lg p-2 text-base focus:ring-blue-300 focus:border-blue-300 transition-all duration-200 shadow-sm"
                                 required
                               />
-                              {q.options.length > 1 && (
+                              {q.options!.length > 1 && ( // Use non-null assertion since we know it exists here
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteOption(index, oIdx)}
@@ -483,7 +579,7 @@ export default function ParentDashboard() {
                         <input
                           type="text"
                           placeholder="e.g., Paris"
-                          value={q.answer}
+                          value={q.answer || ''} // Provide default empty string if answer is undefined
                           onChange={(e) => handleQuestionChange(index, 'answer', e.target.value)}
                           className="w-full border border-gray-300 rounded-xl p-3 text-base focus:ring-purple-400 focus:border-purple-400 transition-all duration-200 shadow-sm"
                         />
@@ -528,7 +624,7 @@ export default function ParentDashboard() {
                 </p>
               ) : (
                 <div className="space-y-6">
-                  {assignmentsData.getAssignmentsForChild.map((assignment) => {
+                  {assignmentsData?.getAssignmentsForChild?.map((assignment: Assignment) => { // Type 'assignment' here
                     const statusColor = {
                       'COMPLETED': 'bg-green-100 text-green-800 border-green-300',
                       'IN_PROGRESS': 'bg-yellow-100 text-yellow-800 border-yellow-300',
@@ -536,9 +632,9 @@ export default function ParentDashboard() {
                     }[assignment.status] || 'bg-gray-100 text-gray-800 border-gray-300';
 
                     const difficultyColors = {
-                        EASY: 'text-green-600 font-extrabold',
-                        MEDIUM: 'text-yellow-600 font-extrabold',
-                        HARD: 'text-red-600 font-extrabold',
+                      EASY: 'text-green-600 font-extrabold',
+                      MEDIUM: 'text-yellow-600 font-extrabold',
+                      HARD: 'text-red-600 font-extrabold',
                     };
 
                     return (
@@ -547,7 +643,7 @@ export default function ParentDashboard() {
                           <div>
                             <h3 className="font-extrabold text-2xl text-blue-800 mb-1">{assignment.title}</h3>
                             <p className={`text-sm ${difficultyColors[assignment.difficulty] || 'text-gray-600'}`}>
-                                Difficulty: {assignment.difficulty || 'N/A'}
+                              Difficulty: {assignment.difficulty || 'N/A'}
                             </p>
                           </div>
                           <span
@@ -559,45 +655,46 @@ export default function ParentDashboard() {
                         <p className="text-gray-700 mb-5 text-base leading-relaxed">{assignment.description}</p>
 
                         <div className="space-y-4 border-t pt-5 mt-5 border-gray-100">
-                            <h4 className="text-lg font-bold text-gray-700">Questions & Responses:</h4>
-                            {assignment.questions.map((q, qIndex) => {
-                                const response = assignment.responses.find((r) => r.questionIndex === qIndex);
-                                const answerText = response ? response.answer : 'No response submitted yet.';
-                                const isCorrectAnswer = q.answer && answerText.toLowerCase() === q.answer.toLowerCase() && answerText.trim() !== '';
+                          <h4 className="text-lg font-bold text-gray-700">Questions & Responses:</h4>
+                          {assignment.questions.map((q: Question, qIndex: number) => { // Type 'q' here
+                            // Safely find response based on questionIndex
+                            const response = assignment.responses?.find((r: Response) => r.questionIndex === qIndex); // Type 'r' here
+                            const answerText = response ? response.answer : 'No response submitted yet.';
+                            const isCorrectAnswer = q.answer && answerText.toLowerCase() === q.answer.toLowerCase() && answerText.trim() !== '';
 
-                                return (
-                                    <div key={qIndex} className="p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-inner">
-                                        <p className="text-md font-semibold text-gray-800 mb-2">
-                                            <span className="text-blue-500 mr-1">Q{qIndex + 1}:</span> {q.prompt}
-                                        </p>
-                                        {q.options && q.options.length > 0 && (
-                                            <ul className="list-disc list-inside text-sm text-gray-600 mb-2 ml-4">
-                                                {q.options.map((opt, i) => (
-                                                    <li key={i}>{opt}</li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                        <p className={`text-sm font-medium ${response ? (isCorrectAnswer ? 'text-green-700' : 'text-red-700') : 'text-gray-600'}`}>
-                                            Your Child's Answer: <span className="font-normal">{answerText}</span>
-                                            {q.answer && q.answer.trim() !== '' && (
-                                                <span className="block text-gray-500 italic mt-1">Expected: {q.answer}</span>
-                                            )}
-                                        </p>
-                                    </div>
-                                );
-                            })}
+                            return (
+                              <div key={qIndex} className="p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-inner">
+                                <p className="text-md font-semibold text-gray-800 mb-2">
+                                  <span className="text-blue-500 mr-1">Q{qIndex + 1}:</span> {q.prompt}
+                                </p>
+                                {q.options && q.options.length > 0 && (
+                                  <ul className="list-disc list-inside text-sm text-gray-600 mb-2 ml-4">
+                                    {q.options.map((opt, i) => (
+                                      <li key={i}>{opt}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                                <p className={`text-sm font-medium ${response ? (isCorrectAnswer ? 'text-green-700' : 'text-red-700') : 'text-gray-600'}`}>
+                                  Your Child's Answer: <span className="font-normal">{answerText}</span>
+                                  {q.answer && q.answer.trim() !== '' && (
+                                    <span className="block text-gray-500 italic mt-1">Expected: {q.answer}</span>
+                                  )}
+                                </p>
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {assignment.status === 'COMPLETED' && (
                           <div className="mt-6 p-5 bg-blue-50 rounded-xl border border-blue-200 shadow-inner">
                             <h4 className="text-lg font-bold text-blue-700 mb-3 flex items-center">
-                                <span className="text-xl mr-2">🌟</span> Give Feedback:
+                              <span className="text-xl mr-2">🌟</span> Give Feedback:
                             </h4>
                             <textarea
                               rows={3}
                               className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-blue-300 focus:border-blue-300 transition-all duration-200 shadow-sm"
                               placeholder="Write your feedback for your child's performance (e.g., 'Great effort!', 'Try reviewing fractions.')..."
-                              value={feedbackMap[assignment.id] ?? assignment.feedback ?? ''}
+                              value={feedbackMap[assignment.id] ?? assignment.feedback ?? ''} // Use nullish coalescing
                               onChange={(e) => handleFeedbackChange(assignment.id, e.target.value)}
                             />
                             <button
@@ -607,12 +704,12 @@ export default function ParentDashboard() {
                               <span className="mr-2">💬</span> Submit Feedback
                             </button>
                             {assignment.feedback && (
-                                <div className="mt-4 p-3 bg-blue-100 rounded-lg border border-blue-200">
-                                    <p className="text-sm text-gray-700 italic font-medium">
-                                        Your Last Feedback:
-                                    </p>
-                                    <p className="text-base text-gray-800">{assignment.feedback}</p>
-                                </div>
+                              <div className="mt-4 p-3 bg-blue-100 rounded-lg border border-blue-200">
+                                <p className="text-sm text-gray-700 italic font-medium">
+                                  Your Last Feedback:
+                                </p>
+                                <p className="text-base text-gray-800 mt-1">{assignment.feedback}</p>
+                              </div>
                             )}
                           </div>
                         )}
