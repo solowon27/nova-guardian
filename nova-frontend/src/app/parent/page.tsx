@@ -439,16 +439,17 @@ export default function ParentDashboard() {
             </p>
             <button
               onClick={() => {
-                // Changed this line: Added optional chaining for childrenData.getMyChildren
-                if (childrenData && Array.isArray(childrenData.getMyChildren) && childrenData.getMyChildren.length > 0) {
-                  handleSelectChild(childrenData.getMyChildren[0]);
+                const myChildren = childrenData?.getMyChildren; // <--- Extract to a local variable here
+                if (myChildren && Array.isArray(myChildren) && myChildren.length > 0) {
+                  handleSelectChild(myChildren[0]);
                 } else {
                   router.push('/parent/add-child');
                 }
               }}
               className="mt-6 px-10 py-5 bg-purple-600 text-white text-xl font-bold rounded-full shadow-lg hover:bg-purple-700 transition-all duration-300 transform hover:scale-105 flex items-center justify-center mx-auto"
             >
-              {childrenData?.getMyChildren?.length > 0 ? 'View First Child\'s Profile' : 'Add Your First Child!'}
+              {/* <--- Use the local variable here too */}
+              {childrenData?.getMyChildren && childrenData.getMyChildren.length > 0 ? 'View First Child\'s Profile' : 'Add Your First Child!'}
               <span className="ml-3 text-2xl">➡️</span>
             </button>
           </div>
