@@ -10,6 +10,16 @@
 !.yarn/releases
 !.yarn/versions
 
+*.local
+*.dev.js
+.env*
+
+# build output
+dist/
+build/
+.next/
+.turbo/
+out/
 # testing
 /coverage
 
@@ -17,8 +27,6 @@
 /.next/
 /out/
 
-# production
-/build
 
 # misc
 .DS_Store
