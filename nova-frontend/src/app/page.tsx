@@ -34,7 +34,7 @@ export default function HomePage() {
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
   const [openFaqIndex, setOpenFaqIndex] = useState(null); // State for FAQ accordion
 
-  useEffect(() => {
+   useEffect(() => {
     const intervalId = setInterval(() => {
       setCurrentTestimonial((prev) => (prev + 1) % testimonials.length);
     }, 6000); // Change testimonial every 6 seconds
@@ -42,7 +42,8 @@ export default function HomePage() {
     return () => clearInterval(intervalId); // Cleanup on unmount
   }, []);
 
-  const toggleFaq = (index) => {
+  // Ensure 'index' parameter is typed as a number
+  const toggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);
   };
 

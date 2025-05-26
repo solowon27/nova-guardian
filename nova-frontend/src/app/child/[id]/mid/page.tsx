@@ -486,12 +486,13 @@ export default function MidDashboard() {
 
               {imageData?.getFunImage && (
                 <div className="mt-4 text-center">
-                  <img
-                    src={imageData.getFunImage.imageUrl}
-                    alt="AI Generated Learning Image"
-                    className="mx-auto rounded-xl shadow-lg w-full max-w-sm sm:max-w-md object-cover border-2 border-indigo-300 transform hover:scale-[1.02] transition-transform duration-300"
-                    onError={(e) => { e.target.onerror = null; (e.target as HTMLImageElement).src="https://placehold.co/400x300/a78bfa/ffffff?text=Image+Error"; }} // Fallback
-                  />
+                 <img
+  src={imageData.getFunImage.imageUrl} // The main image source
+  alt="AI Generated Learning Image"
+  className="mx-auto rounded-xl shadow-lg w-full max-w-sm sm:max-w-md object-cover border-2 border-indigo-300 transform hover:scale-[1.02] transition-transform duration-300"
+  // Removed onError prop completely
+/>
+
                   <p className="text-lg text-gray-700 mt-6 leading-relaxed p-4 bg-indigo-50 rounded-xl shadow-inner border border-indigo-100">
                     <span className="font-semibold text-indigo-800">Explanation:</span> {imageData.getFunImage.explanation}
                   </p>
