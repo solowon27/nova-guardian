@@ -13,7 +13,7 @@ const startServer = async () => {
 
   // ✅ Enable CORS
   app.use(cors({
-    origin: 'http://localhost:3000',
+    origin: 'https://nova-guardian.vercel.app/',
     methods: ['POST'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
