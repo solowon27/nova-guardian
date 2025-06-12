@@ -22,7 +22,20 @@ const startServer = async () => {
   // ✅ Middleware to decode JWT and attach user
   app.use(auth);
 
-  // ✅ Apollo Server setup
+  // ✅ Wait for MongoDB to connect FIRST
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 10000, // ⏱ timeout after 10s
+    });
+    console.log('✅ MongoDB connected successfully!');
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1); // Don't start the server if DB isn't connected
+  }
+
+  // ✅ Apollo Server setup AFTER MongoDB is ready
   const server = new ApolloServer({
     typeDefs,
     resolvers,
@@ -35,16 +48,11 @@ const startServer = async () => {
   await server.start();
   server.applyMiddleware({ app, path: '/graphql' });
 
-  // ✅ MongoDB Connection
-  mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('✅ MongoDB connected successfully!'))
-    .catch((err) => console.error('❌ MongoDB connection error:', err));
-
   // ✅ Start Express Server
-  const PORT = 4000;
+  const PORT = process.env.PORT || 4000;
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 NovaGuardian Backend at http://localhost:${PORT}/graphql`);
   });
 };
 
-startServer().catch(err => console.error(err));
+startServer().catch(err => console.error('❌ Server startup failed:', err));
