@@ -27,7 +27,7 @@ const startServer = async () => {
     await mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000, // ⏱ timeout after 10s
+      serverSelectionTimeoutMS: 30000, // ⏱ timeout after 10s
     });
     console.log('✅ MongoDB connected successfully!');
   } catch (err) {
@@ -43,13 +43,17 @@ const startServer = async () => {
       req,
       user: req.user,
     }),
+    cache: 'bounded' 
   });
 
   await server.start();
   server.applyMiddleware({ app, path: '/graphql' });
 
   // ✅ Start Express Server
-  const PORT = process.env.PORT || 4000;
+  const PORT = process.env.PORT;
+  if(!PORT) {
+     throw new Error('❌ PORT not defined! Render needs it to bind correctly.');
+  }
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 NovaGuardian Backend at http://localhost:${PORT}/graphql`);
   });
