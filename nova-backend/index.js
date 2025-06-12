@@ -34,6 +34,18 @@ const startServer = async () => {
     process.exit(1);
   }
 
+  app.get('/mongo-test', async (req, res) => {
+  try {
+    const User = require('./models/User');
+    const user = await User.findOne(); // Just try to read any
+    res.json({ message: '✅ Mongo query worked', user });
+  } catch (err) {
+    console.error('❌ /mongo-test error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
   // ✅ Apollo Server setup AFTER MongoDB is ready
   const server = new ApolloServer({
     typeDefs,
