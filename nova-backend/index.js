@@ -25,8 +25,6 @@ const startServer = async () => {
   // ✅ Wait for MongoDB to connect FIRST
   try {
     await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
       serverSelectionTimeoutMS: 30000, // ⏱ timeout after 10s
     });
     console.log('✅ MongoDB connected successfully!');
