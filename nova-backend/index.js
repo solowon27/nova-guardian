@@ -23,14 +23,15 @@ const startServer = async () => {
   app.use(auth);
 
   // ✅ Wait for MongoDB to connect FIRST
-  try {
+   try {
     await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 30000, // ⏱ timeout after 10s
+      serverSelectionTimeoutMS: 10000,
     });
-    console.log('✅ MongoDB connected successfully!');
+    await mongoose.connection.db.admin().ping();
+    console.log('✅ MongoDB connected and responsive!');
   } catch (err) {
-    console.error('❌ MongoDB connection error:', err);
-    process.exit(1); // Don't start the server if DB isn't connected
+    console.error('❌ MongoDB connection failed:', err);
+    process.exit(1);
   }
 
   // ✅ Apollo Server setup AFTER MongoDB is ready
@@ -41,19 +42,18 @@ const startServer = async () => {
       req,
       user: req.user,
     }),
-    cache: 'bounded' 
   });
 
   await server.start();
   server.applyMiddleware({ app, path: '/graphql' });
 
-  // ✅ Start Express Server
+  app.get('/', (req, res) => res.send('✅ NovaGuardian backend running.'));
+
   const PORT = process.env.PORT;
-  if(!PORT) {
-     throw new Error('❌ PORT not defined! Render needs it to bind correctly.');
-  }
+  if (!PORT) throw new Error('❌ PORT is not defined');
+  
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 NovaGuardian Backend at http://localhost:${PORT}/graphql`);
+    console.log(`🚀 NovaGuardian Backend live at http://localhost:${PORT}/graphql`);
   });
 };
 
