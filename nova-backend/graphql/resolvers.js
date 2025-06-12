@@ -234,25 +234,29 @@ evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
 
 
   Mutation: {
-    registerParent: async (_, { email, password }) => {
-      const existing = await User.findOne({ email });
-      if (existing) throw new Error('User already exists');
-      const hashed = await bcrypt.hash(password, 12);
-      const user = await User.create({ email, password: hashed, role: 'PARENT' });
+   registerParent: async (_, { email, password }) => {
+  const User = require('../../models/User'); // ✅ Move inside
+  const existing = await User.findOne({ email });
+  if (existing) throw new Error('User already exists');
 
-      const token = jwt.sign({ id: user._id, role: user.role }, SECRET);
-      return { token, user };
-    },
+  const hashed = await bcrypt.hash(password, 12);
+  const user = await User.create({ email, password: hashed, role: 'PARENT' });
 
-    login: async (_, { email, password }) => {
-      const user = await User.findOne({ email });
-      if (!user) throw new Error('Invalid email');
-      const valid = await bcrypt.compare(password, user.password);
-      if (!valid) throw new Error('Invalid password');
+  const token = jwt.sign({ id: user._id, role: user.role }, SECRET);
+  return { token, user };
+},
 
-      const token = jwt.sign({ id: user._id, role: user.role }, SECRET);
-      return { token, user };
-    },
+login: async (_, { email, password }) => {
+  const User = require('../../models/User'); // ✅ Move inside
+  const user = await User.findOne({ email });
+  if (!user) throw new Error('Invalid email');
+
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) throw new Error('Invalid password');
+
+  const token = jwt.sign({ id: user._id, role: user.role }, SECRET);
+  return { token, user };
+},
 
     createChildProfile: async (_, { name, age, username, password }, { req }) => {
       const user = req.user;
@@ -291,19 +295,20 @@ evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
       return { token, child };
     },
 
-    createAssignment: async (_, { childId, title, description, questions }, { req }) => {
-      const user = req.user;
-      if (!user || user.role !== 'PARENT') throw new Error('Unauthorized');
+   createAssignment: async (_, { childId, title, description, questions, difficulty }, { req }) => { // Add 'difficulty' here
+  const user = req.user;
+  if (!user || user.role !== 'PARENT') throw new Error('Unauthorized');
 
-      const assignment = await Assignment.create({
-        title,
-        description,
-        child: childId,
-        questions, // Now accepting detailed question list
-      });
+  const assignment = await Assignment.create({
+    title,
+    description,
+    child: childId,
+    questions,
+    difficulty,
+  });
 
-      return assignment;
-    },
+  return assignment;
+},
 
     updateAssignmentStatus: async (_, { assignmentId, status, responses }, { req }) => {
       const child = req.child;
