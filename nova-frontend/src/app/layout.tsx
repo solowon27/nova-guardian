@@ -5,6 +5,8 @@ import ApolloWrapper from '@/components/ApolloWrapper';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
+console.log('🛰️ API Target:', process.env.NEXT_PUBLIC_API_URL);
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
