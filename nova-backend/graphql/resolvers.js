@@ -234,29 +234,25 @@ evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
 
 
   Mutation: {
-   registerParent: async (_, { email, password }) => {
-  const User = require('../../models/User'); // ✅ Move inside
-  const existing = await User.findOne({ email });
-  if (existing) throw new Error('User already exists');
+    registerParent: async (_, { email, password }) => {
+      const existing = await User.findOne({ email });
+      if (existing) throw new Error('User already exists');
+      const hashed = await bcrypt.hash(password, 12);
+      const user = await User.create({ email, password: hashed, role: 'PARENT' });
 
-  const hashed = await bcrypt.hash(password, 12);
-  const user = await User.create({ email, password: hashed, role: 'PARENT' });
+      const token = jwt.sign({ id: user._id, role: user.role }, SECRET);
+      return { token, user };
+    },
 
-  const token = jwt.sign({ id: user._id, role: user.role }, SECRET);
-  return { token, user };
-},
+    login: async (_, { email, password }) => {
+      const user = await User.findOne({ email });
+      if (!user) throw new Error('Invalid email');
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) throw new Error('Invalid password');
 
-login: async (_, { email, password }) => {
-  const User = require('../../models/User'); // ✅ Move inside
-  const user = await User.findOne({ email });
-  if (!user) throw new Error('Invalid email');
-
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid) throw new Error('Invalid password');
-
-  const token = jwt.sign({ id: user._id, role: user.role }, SECRET);
-  return { token, user };
-},
+      const token = jwt.sign({ id: user._id, role: user.role }, SECRET);
+      return { token, user };
+    },
 
     createChildProfile: async (_, { name, age, username, password }, { req }) => {
       const user = req.user;
