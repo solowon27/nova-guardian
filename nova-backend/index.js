@@ -50,8 +50,10 @@ const startServer = async () => {
   const server = new ApolloServer({
     typeDefs,
     resolvers,    
-      introspection: true,
-      playground: true,
+      // introspection: true,
+      // playground: true,
+      cache: "bounded", // ✅ Mitigates unbounded cache warning
+      persistedQueries: false, // ✅ Disables persisted queries
     context: ({ req }) => ({
       req,
       user: req.user,
