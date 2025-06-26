@@ -11,7 +11,7 @@ const auth = require('./utils/auth');
 const startServer = async () => {
   const app = express();
 
-  // ✅ Enable CORS
+   // ✅ Enable CORS
   app.use(cors({
     origin: 'https://nova-guardian.vercel.app',
     methods: ['GET', 'POST', 'OPTIONS'],
@@ -53,6 +53,7 @@ const startServer = async () => {
     context: ({ req }) => ({
       req,
       user: req.user,
+      introspection: true,
     }),
   });
 
