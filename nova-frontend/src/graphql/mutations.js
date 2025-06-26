@@ -37,7 +37,7 @@ export const CREATE_ASSIGNMENT = gql`
     $title: String!
     $description: String!
     $questions: [QuestionInput!]!
-    $difficulty: String!
+    $difficulty: Difficulty!
   ) {
     createAssignment(
       childId: $childId
