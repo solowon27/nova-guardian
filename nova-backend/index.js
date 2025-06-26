@@ -63,11 +63,9 @@ const startServer = async () => {
 
   app.get('/', (req, res) => res.send('✅ NovaGuardian backend running.'));
 
-  const PORT = process.env.PORT;
-  if (!PORT) throw new Error('❌ PORT is not defined');
-  
-  app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 NovaGuardian Backend live at https://nova-guardian-3t2p.onrender.com/graphql`);
+  const PORT = process.env.PORT || 4000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 NovaGuardian Backend live at ${server.graphqlPath}`);
 });
 };
 
