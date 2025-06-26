@@ -54,6 +54,7 @@ const startServer = async () => {
       req,
       user: req.user,
       introspection: true,
+      playground: true,
     }),
   });
 
@@ -66,8 +67,8 @@ const startServer = async () => {
   if (!PORT) throw new Error('❌ PORT is not defined');
   
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 NovaGuardian Backend live at http://localhost:${PORT}/graphql`);
-  });
+  console.log(`🚀 NovaGuardian Backend live at https://nova-guardian-3t2p.onrender.com/graphql`);
+});
 };
 
 startServer().catch(err => console.error('❌ Server startup failed:', err));
