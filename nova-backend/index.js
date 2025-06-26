@@ -49,12 +49,12 @@ const startServer = async () => {
   // ✅ Apollo Server setup AFTER MongoDB is ready
   const server = new ApolloServer({
     typeDefs,
-    resolvers,
+    resolvers,    
+      introspection: true,
+      playground: true,
     context: ({ req }) => ({
       req,
       user: req.user,
-      introspection: true,
-      playground: true,
     }),
   });
 
