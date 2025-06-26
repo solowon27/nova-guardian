@@ -68,6 +68,12 @@ input ResponseInput {
   answer: String!
 }
 
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
   type Assignment {
   id: ID!
   title: String!
@@ -118,7 +124,7 @@ type Notification {
     createChildProfile(name: String!, age: Int!, username: String!, password: String!): Child
     loginChild(username: String!, password: String!): AuthPayload
     
-    createAssignment(childId: ID!, title: String!, description: String!, questions: [QuestionInput!]!): Assignment
+    createAssignment(childId: ID!, title: String!, description: String!, questions: [QuestionInput!]!, difficulty: Difficulty): Assignment
     updateAssignmentStatus(assignmentId: ID!, status: String!, responses: [ResponseInput]): Assignment
     updateAssignmentFeedback(assignmentId: ID!, feedback: String!): Assignment
     
