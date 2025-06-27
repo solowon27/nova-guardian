@@ -133,9 +133,16 @@ getFunImage: async () => {
       const promptResponse = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "You're a creative AI that makes up fun, safe image ideas for kids." },
-          { role: "user", content: "Give me one fascinating scientific fact about the universe (biology, physics, astronomy, chemistry, geography, history, math, music, art etc.) and describe it in a way that could be visualized as an image for children. Just give me the image description." }
-        ]
+                    {
+                      "role": "system",
+                      "content": "You're a creative AI that generates fun, educational, and kid-friendly image ideas. Your goal is to describe simple but interesting concepts like animals, machines, planets, or places in a way that's safe, exciting, and easy to imagine as an illustration for children."
+                    },
+                    {
+                      "role": "user",
+                      "content": "Generate a random animal, machine/equipment, planet, or country. For one of them, provide: 1) a fun, imaginative name for the image, and 2) a short explanation that helps kids understand what it is and why it’s cool. Make it visual so it can be drawn as a kid-friendly image."
+                    }
+                  ]
+
       });
 
       const prompt = promptResponse.choices[0].message.content.trim();
