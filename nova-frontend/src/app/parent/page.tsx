@@ -823,7 +823,7 @@ export default function ParentDashboard() {
                                 Evaluate Answers
                                 </button>
                             )}
-                            {(assignment.status === 'EVALUATED' || assignment.evaluation?.length > 0) && ( // Show score if evaluated
+                            ((assignment.status === 'EVALUATED') || (assignment.evaluation && assignment.evaluation.length > 0)) && (
                                 <div className="text-lg font-bold text-purple-700 mt-2">
                                 Score: {assignment.totalCorrect !== undefined ? assignment.totalCorrect : 'N/A'}/{assignment.questions.length} ({assignment.score !== undefined ? assignment.score.toFixed(0) : 'N/A'}%)
                                 </div>
