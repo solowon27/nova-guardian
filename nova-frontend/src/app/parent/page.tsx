@@ -814,20 +814,24 @@ export default function ParentDashboard() {
                           <p className="text-gray-600 mb-1">Difficulty: <span className={`font-semibold ${assignment.difficulty === 'EASY' ? 'text-green-600' : assignment.difficulty === 'MEDIUM' ? 'text-yellow-600' : 'text-red-600'}`}>{assignment.difficulty}</span></p>
                           <p className="text-gray-600">Status: <span className={`font-semibold ${assignment.status === 'COMPLETED' || assignment.status === 'EVALUATED' ? 'text-green-600' : assignment.status === 'IN_PROGRESS' ? 'text-yellow-600' : 'text-blue-600'}`}>{assignment.status.replace('_', ' ')}</span></p>
                         </div>
-                        <div className="flex flex-col items-end">
-                            {assignment.status === 'COMPLETED' && !assignment.evaluation?.length && ( // Only show evaluate if completed and not yet evaluated
-                                <button
-                                onClick={() => handleOpenEvaluation(assignment)}
-                                className="px-5 py-2 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-colors duration-300 shadow-md text-sm mt-2"
-                                >
-                                Evaluate Answers
-                                </button>
-                            )}
-                            ((assignment.status === 'EVALUATED') || (assignment.evaluation && assignment.evaluation.length > 0)) && (
-                                <div className="text-lg font-bold text-purple-700 mt-2">
-                                Score: {assignment.totalCorrect !== undefined ? assignment.totalCorrect : 'N/A'}/{assignment.questions.length} ({assignment.score !== undefined ? assignment.score.toFixed(0) : 'N/A'}%)
-                                </div>
-                            )}
+                       <div className="flex flex-col items-end">
+                          {assignment.status === 'COMPLETED' && !assignment.evaluation?.length && (
+                            <button
+                              onClick={() => handleOpenEvaluation(assignment)}
+                              className="px-5 py-2 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-colors duration-300 shadow-md text-sm mt-2"
+                            >
+                              Evaluate Answers
+                            </button>
+                          )}
+
+                          {(assignment.status === 'EVALUATED' || (assignment.evaluation && assignment.evaluation.length > 0)) && (
+                            <div className="text-lg font-bold text-purple-700 mt-2">
+                              Score: {assignment.totalCorrect !== undefined ? assignment.totalCorrect : 'N/A'} /
+                              {assignment.questions.length} (
+                              {assignment.score !== undefined ? assignment.score.toFixed(0) : 'N/A'}%
+                              )
+                            </div>
+                          )}
                         </div>
                       </div>
 
