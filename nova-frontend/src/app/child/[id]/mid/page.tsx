@@ -603,7 +603,7 @@ export default function MidDashboard() {
                 Test your science smarts and earn bonus XP!
               </p>
               {/* This is where your actual SciencePuzzleSection component would render */}
-              <SciencePuzzleSection childId={childId} /> {/* Pass childId if SciencePuzzleSection needs it */}
+              <SciencePuzzleSection />
             </section>
           </div>
         </div>
