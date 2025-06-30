@@ -30,9 +30,17 @@ export const GET_MY_ASSIGNMENTS = gql`
         questionIndex
         answer
       }
+      evaluation {
+        questionIndex
+        isCorrect
+        feedback
+      }
+      totalCorrect
+      score
     }
   }
 `;
+
 
 export const GET_FUN_IMAGE = gql`
   query GetFunImage {
@@ -99,6 +107,15 @@ export const GET_ASSIGNMENTS_FOR_CHILD = gql`
         questionIndex
         answer
       }
+      evaluation { 
+        questionIndex
+        isCorrect
+        feedback
+      }
+      totalCorrect 
+      score 
+      createdAt 
+      completedAt 
     }
   }
 `;

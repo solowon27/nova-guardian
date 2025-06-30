@@ -2,8 +2,8 @@
 
 import { gql, useMutation, useQuery } from '@apollo/client';
 import { useParams } from 'next/navigation';
-import { useState } from 'react'; // useEffect is implicitly used via state updates for XP, no explicit useEffect needed now for previousXp
-import SciencePuzzleSection from "@/components/SciencePuzzleSection";
+import { useState } from 'react';
+import SciencePuzzleSection from "@/components/SciencePuzzleSection"; // Ensure this component exists and works
 
 // --- GraphQL Queries and Mutations ---
 import { GET_FUN_IMAGE } from '@/graphql/queries';
@@ -21,9 +21,21 @@ interface Child {
 }
 
 interface Question {
-  prompt: string;
   type: 'EXPLAIN' | 'SHORT_ANSWER' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+  prompt: string;
   options?: string[]; // Optional for non-multiple choice
+  answer?: string; // The correct answer from the server
+}
+
+interface Response {
+  questionIndex: number;
+  answer: string;
+}
+
+interface Evaluation {
+  questionIndex: number;
+  isCorrect: boolean;
+  feedback?: string; // Feedback specific to this question from parent/server
 }
 
 interface Assignment {
@@ -31,10 +43,15 @@ interface Assignment {
   title: string;
   description: string;
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
-  status: 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED';
+  status: 'PENDING' | 'COMPLETED' | 'EVALUATED'; // Updated to reflect Mongoose schema
   questions: Question[];
-  feedback?: string;
-  createdAt: string; // Assuming assignments have a createdAt field for sorting
+  responses?: Response[]; // Student's responses
+  evaluation?: Evaluation[]; // Server's evaluation of responses
+  feedback?: string; // Overall feedback from parent
+  totalCorrect: number; // New: Total correct answers
+  score: number; // New: Percentage score
+  createdAt: string;
+  completedAt?: string | null; // When the assignment was completed
 }
 
 interface GetChildByIdData {
@@ -72,8 +89,21 @@ export default function MidDashboard() {
   // Sort assignments: Most recent uncompleted first, then completed by most recent
   const sortedAssignments = [...(assignmentsData?.getMyAssignments ?? [])].sort((a, b) => {
     // Bring uncompleted to the top, then sort by createdAt descending
-    if (a.status !== 'COMPLETED' && b.status === 'COMPLETED') return -1;
-    if (a.status === 'COMPLETED' && b.status !== 'COMPLETED') return 1;
+    const statusA = a.status;
+    const statusB = b.status;
+
+    // Prioritize 'PENDING' over 'COMPLETED' or 'EVALUATED'
+    if (statusA === 'PENDING' && (statusB === 'COMPLETED' || statusB === 'EVALUATED')) return -1;
+    if ((statusA === 'COMPLETED' || statusA === 'EVALUATED') && statusB === 'PENDING') return 1;
+
+    // For completed/evaluated assignments, sort by completedAt if available, otherwise createdAt
+    if ((statusA === 'COMPLETED' || statusA === 'EVALUATED') && (statusB === 'COMPLETED' || statusB === 'EVALUATED')) {
+      const aTime = a.completedAt ? new Date(a.completedAt).getTime() : new Date(a.createdAt).getTime();
+      const bTime = b.completedAt ? new Date(b.completedAt).getTime() : new Date(b.createdAt).getTime();
+      return bTime - aTime; // Most recent completed first
+    }
+
+    // For pending assignments, sort by createdAt descending (most recent pending first)
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
@@ -94,6 +124,7 @@ export default function MidDashboard() {
   const handleInputChange = (assignmentQuestionId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [assignmentQuestionId]: value }));
     const assignmentId = assignmentQuestionId.split('-')[0];
+    // Set inProgress for the specific assignment
     setInProgress(prev => ({ ...prev, [assignmentId]: true }));
   };
 
@@ -118,31 +149,46 @@ export default function MidDashboard() {
     const child = childData.getChildById;
 
     try {
+      // The backend (updateAssignmentStatus resolver) is now responsible for:
+      // 1. Setting status to 'COMPLETED' (or 'EVALUATED')
+      // 2. Storing responses
+      // 3. Calculating evaluation, totalCorrect, score
+      // 4. Updating child XP and badges
+      // 5. Sending parent notifications
+
+      // Call updateStatus mutation
       await updateStatus({
         variables: {
           assignmentId: assignment.id,
-          status: 'COMPLETED',
+          status: 'COMPLETED', // Or 'EVALUATED' if you prefer to skip 'COMPLETED'
           responses: responsePayload,
         },
       });
 
-      const xpGain = assignment.difficulty === 'EASY' ? 10 : assignment.difficulty === 'MEDIUM' ? 20 : 30;
-      await updateChildXP({ variables: { childId: child.id, xp: child.xp + xpGain } });
+      // Refetch assignments data to reflect the changes, including evaluation, score, XP, and badges
+      const { data: refetchedAssignmentsResult } = await refetch();
+      const updatedAssignment = refetchedAssignmentsResult?.getMyAssignments.find(a => a.id === assignment.id);
 
-      // Trigger XP animation
-      setXpAnimating(true);
-      setTimeout(() => setXpAnimating(false), 1000); // Reset animation state after 1 second
+      if (updatedAssignment) {
+        // Trigger XP animation if XP has changed (or always for a visual cue)
+        setXpAnimating(true);
+        setTimeout(() => setXpAnimating(false), 1000); // Reset animation state after 1 second
 
-      // Check for 'First Task Challenger' badge *before* refetching to get accurate pre-submission count
-      const completedAssignmentsCountBeforeSubmit = sortedAssignments.filter(a => a.status === 'COMPLETED').length;
+        alert(`✅ Assignment "${updatedAssignment.title}" submitted and evaluated! You scored ${updatedAssignment.score.toFixed(0)}%!`);
 
-      if (completedAssignmentsCountBeforeSubmit === 0 && !child.badges.includes('First Task Challenger')) {
-        await addChildBadge({ variables: { childId: child.id, badge: 'First Task Challenger' } });
-        alert('🎉 You earned a new badge: First Task Challenger!');
+        // Badges are now handled on the server.
+        // You might want to display a toast notification here if the server pushParentNotification
+        // mechanism doesn't directly update the client in real-time, or if you want an immediate client-side alert.
+        // The XP and badge updates are now done in the backend `updateAssignmentStatus` mutation.
+        // We just need to refetch to get the latest `child.xp` and `child.badges`.
+        // The `updateChildXP` and `addChildBadge` mutations here are likely redundant if your backend is handling them.
+        // If your backend *only* returns the assignment, and you still need to call XP/badge mutations, keep them.
+        // But based on the backend resolver changes we discussed, they are integrated.
+      } else {
+        alert('Assignment submitted, but could not retrieve updated details.');
       }
 
-      alert('✅ Assignment submitted successfully! You earned XP!');
-      refetch(); // Refetch after all mutations are potentially done
+      // Clear answers for the submitted assignment
       setAnswers(prev => {
         const newAnswers = { ...prev };
         assignment.questions.forEach((_, index) => {
@@ -150,11 +196,12 @@ export default function MidDashboard() {
         });
         return newAnswers;
       });
+      // Set inProgress for this assignment to false
       setInProgress(prev => ({ ...prev, [assignment.id]: false }));
-
 
     } catch (err) {
       console.error("❌ ApolloError during assignment submission:", err);
+      // More specific error handling could be added based on err.graphQLErrors
       alert('❌ Failed to submit assignment. Please try again.');
     }
   };
@@ -165,7 +212,7 @@ export default function MidDashboard() {
       case '🌟 Star Student': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case '📖 Avid Reader': return 'bg-green-100 text-green-800 border-green-200';
       case '🏅 Assignment Ace': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'First Task Challenger': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'First Task': return 'bg-purple-100 text-purple-800 border-purple-200'; // Updated to 'First Task' as per server
       case 'Task Master': return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'Rising Star': return 'bg-teal-100 text-teal-800 border-teal-200';
       case 'Hard Worker': return 'bg-red-100 text-red-800 border-red-200';
@@ -310,7 +357,7 @@ export default function MidDashboard() {
               <span className="mr-4 text-4xl">📚</span> Your Adventures
               {sortedAssignments.length > 0 && (
                 <span className="ml-auto text-lg font-bold text-gray-500 bg-yellow-300 px-4 py-2 rounded-full shadow-inner hidden sm:inline-block">
-                  ({sortedAssignments.filter(a => a.status !== 'COMPLETED').length} pending)
+                  ({sortedAssignments.filter(a => a.status === 'PENDING').length} pending)
                 </span>
               )}
             </h2>
@@ -321,17 +368,19 @@ export default function MidDashboard() {
                 </p>
               ) : (
                 sortedAssignments.map((assignment) => {
-                  const isCompleted = assignment.status === 'COMPLETED';
-                  const isInProgressStatus = inProgress[assignment.id] && !isCompleted;
+                  // The server now sends 'COMPLETED' or 'EVALUATED' for finished assignments
+                  const isCompletedOrEvaluated = assignment.status === 'COMPLETED' || assignment.status === 'EVALUATED';
+                  // InProgress status is client-side, set if user has typed something but not submitted
+                  const isInProgressStatus = inProgress[assignment.id] && !isCompletedOrEvaluated;
 
-                  const statusBadgeColor = isCompleted
+                  const statusBadgeColor = isCompletedOrEvaluated
                     ? 'bg-green-100 text-green-700 border-green-300'
                     : isInProgressStatus
                       ? 'bg-yellow-100 text-yellow-700 border-yellow-300'
-                      : 'bg-red-500 text-white border-blue-300';
+                      : 'bg-indigo-100 text-indigo-700 border-indigo-300'; // Default for PENDING
 
-                  const statusBadgeLabel = isCompleted
-                    ? '✅ Completed'
+                  const statusBadgeLabel = isCompletedOrEvaluated
+                    ? (assignment.status === 'EVALUATED' ? '✨ Evaluated' : '✅ Completed')
                     : isInProgressStatus
                       ? '✍️ In Progress'
                       : '🆕 New';
@@ -347,7 +396,7 @@ export default function MidDashboard() {
                       key={assignment.id}
                       className={`
                         bg-white rounded-xl shadow-md p-5 border-b-4
-                        ${isCompleted ? 'border-green-100 opacity-70' : 'border-blue-100 hover:shadow-lg hover:border-purple-200 transition-all duration-300'}
+                        ${isCompletedOrEvaluated ? 'border-green-100 opacity-90' : 'border-blue-100 hover:shadow-lg hover:border-purple-200 transition-all duration-300'}
                       `}
                     >
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
@@ -365,7 +414,25 @@ export default function MidDashboard() {
                       </div>
                       <p className="mb-5 text-gray-700 text-base leading-relaxed">{assignment.description}</p>
 
-                      {!isCompleted && assignment.questions?.length > 0 && (
+                      {/* Display Score and Correct Answers if Completed or Evaluated */}
+                      {isCompletedOrEvaluated && (
+                        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200 shadow-sm flex flex-col sm:flex-row justify-around items-center text-center sm:text-left space-y-2 sm:space-y-0">
+                          <p className="text-lg font-bold text-blue-700">
+                            Score: <span className="text-purple-600">{assignment.score.toFixed(0)}%</span>
+                          </p>
+                          <p className="text-lg font-bold text-blue-700">
+                            Correct: <span className="text-green-600">{assignment.totalCorrect}</span> / <span className="text-gray-600">{assignment.questions.length}</span>
+                          </p>
+                          {assignment.completedAt && (
+                              <p className="text-sm text-gray-500">
+                                Completed on: {new Date(assignment.completedAt).toLocaleDateString()}
+                              </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Show questions if not completed */}
+                      {!isCompletedOrEvaluated && assignment.questions?.length > 0 && (
                         <div className="space-y-4 border-t pt-4 mt-4 border-gray-100">
                           <h4 className="text-lg font-bold text-gray-700 flex items-center">
                             <span className="mr-2 text-indigo-500">✍️</span> Your Turn:
@@ -434,16 +501,53 @@ export default function MidDashboard() {
                         </div>
                       )}
 
-                      {isCompleted && (
-                        <p className="text-base text-green-700 mt-4 italic font-semibold text-center p-3 bg-green-50 rounded-lg border border-green-200 shadow-sm">
-                          ✅ Assignment Completed! Great job!
-                        </p>
+                      {/* Display Results and Feedback if Completed/Evaluated */}
+                      {isCompletedOrEvaluated && (
+                        <div className="space-y-3 border-t pt-4 mt-4 border-gray-100">
+                          <h4 className="text-lg font-bold text-gray-700 flex items-center">
+                            <span className="mr-2 text-indigo-500">🌟</span> Your Results:
+                          </h4>
+                          {assignment.questions.map((q, qIndex) => {
+                            const evaluation = assignment.evaluation?.find(e => e.questionIndex === qIndex);
+                            const response = assignment.responses?.find(r => r.questionIndex === qIndex); // Get student's response
+
+                            return (
+                              <div key={qIndex} className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                                <p className="font-bold text-base mb-2 text-gray-800">
+                                  <span className="text-blue-600 mr-2">{qIndex + 1}.</span> {q.prompt}
+                                </p>
+                                {response && (
+                                  <p className="text-sm text-gray-600 italic">
+                                    Your Answer: <span className="font-semibold text-purple-600">{response.answer}</span>
+                                  </p>
+                                )}
+                                {q.answer && ( // Show correct answer if available (e.g., for MC, TF)
+                                  <p className="text-sm text-gray-600 italic">
+                                    Correct Answer: <span className="font-semibold text-green-600">{q.answer}</span>
+                                  </p>
+                                )}
+                                {evaluation && (
+                                  <div className="mt-2">
+                                    <p className={`font-semibold text-sm ${evaluation.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                                      {evaluation.isCorrect ? 'Correct! 🎉' : 'Incorrect 😔'}
+                                    </p>
+                                    {evaluation.feedback && (
+                                      <p className="text-sm text-gray-700 mt-1">
+                                        Server feedback for this question: <span className="italic">{evaluation.feedback}</span>
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
 
                       {assignment.feedback && (
                         <div className="mt-4 p-4 bg-purple-50 border-l-4 border-purple-400 rounded-lg text-base text-gray-800 shadow-sm">
                           <span className="font-bold text-purple-800 flex items-center mb-1">
-                            <span className="text-xl mr-2">💬</span> Parent's Note:
+                            <span className="text-xl mr-2">💬</span> Overall Parent's Note:
                           </span>
                           <p>{assignment.feedback}</p>
                         </div>
@@ -499,12 +603,7 @@ export default function MidDashboard() {
                 Test your science smarts and earn bonus XP!
               </p>
               {/* This is where your actual SciencePuzzleSection component would render */}
-              <SciencePuzzleSection />
-              <div className="bg-green-50 p-5 rounded-xl border border-green-200 shadow-inner text-center text-gray-600 italic">
-                <p className="text-sm">
-                  (Your `SciencePuzzleSection` component will appear here.)
-                </p>
-              </div>
+              <SciencePuzzleSection childId={childId} /> {/* Pass childId if SciencePuzzleSection needs it */}
             </section>
           </div>
         </div>

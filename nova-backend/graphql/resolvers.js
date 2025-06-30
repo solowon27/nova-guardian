@@ -78,6 +78,9 @@ module.exports = {
         responses: a.responses || [],
         questions: a.questions || [],
         feedback: a.feedback || '',
+        totalCorrect: a.totalCorrect || 0, // Ensure these are included
+        score: a.score || 0,             // Ensure these are included
+        evaluation: a.evaluation || [],  // Ensure these are included
         createdAt: a.createdAt?.toISOString(),
         completedAt: a.completedAt?.toISOString() || null,
       }));
@@ -92,13 +95,18 @@ module.exports = {
       return assignments.map(a => ({
         ...a,
         id: a._id.toString(),
-        responses: a.responses || [],
-        questions: a.questions || [],
-        feedback: a.feedback || '',
         title: a.title,
         description: a.description,
         status: a.status,
         difficulty: a.difficulty || 'EASY',
+        responses: a.responses || [],
+        questions: a.questions || [],
+        feedback: a.feedback || '',
+        totalCorrect: a.totalCorrect || 0,
+        score: a.score || 0,
+        evaluation: a.evaluation || [],
+        createdAt: a.createdAt?.toISOString(),
+        completedAt: a.completedAt?.toISOString() || null,
       }));
     },
 
@@ -118,8 +126,8 @@ module.exports = {
         }));
     },
 
-  
-getFunImage: async () => {
+
+    getFunImage: async () => {
       const now = Date.now();
       const hoursSince = (now - lastGeneratedAt) / (1000 * 60 * 60);
 
@@ -133,15 +141,15 @@ getFunImage: async () => {
       const promptResponse = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
-                    {
-                      "role": "system",
-                      "content": "You're a creative AI that generates fun, educational, and kid-friendly image ideas. Your goal is to describe simple but interesting concepts like animals, machines, planets, or places in a way that's safe, exciting, and easy to imagine as an illustration for children."
-                    },
-                    {
-                      "role": "user",
-                      "content": "Generate a random animal, machine/equipment, planet, or country. For one of them, provide: 1) a fun, imaginative name for the image, and 2) a short explanation that helps kids understand what it is and why it’s cool. Make it visual so it can be drawn as a kid-friendly image."
-                    }
-                  ]
+          {
+            "role": "system",
+            "content": "You're an informative and creative AI that generates fun, educational, and kid-friendly image ideas based on real-world subjects. Your goal is to describe simple but interesting real animals, plants, people, or cities in a way that's safe, exciting, and easy to imagine as an illustration for children. Focus on accurate but engaging descriptions."
+          },
+          {
+            "role": "user",
+            "content": "Generate a random real-world animal, plant, famous person, or city. For the chosen subject, provide: 1) a fun, imaginative name for the image that hints at its real-world nature, and 2) a short, accurate explanation that helps kids understand what it is and why it’s cool or interesting. Make it highly visual so it can be drawn as a kid-friendly image."
+          }
+        ]
 
       });
 
@@ -173,9 +181,9 @@ getFunImage: async () => {
     },
 
     generatePuzzleFromTopic: async (_, { topic }) => {
-  const systemPrompt = "You're a creative science educator for kids aged 7-13. Your job is to generate visual puzzles or questions based on real science topics, and describe the image to generate and the question to ask.";
+      const systemPrompt = "You're a creative science educator for kids aged 7-13. Your job is to generate visual puzzles or questions based on real science topics, and describe the image to generate and the question to ask.";
 
-  const userPrompt = `
+      const userPrompt = `
 Generate a fun, image-based question or puzzle for kids based on this topic: "${topic}".
 Return your answer in this exact format:
 ---
@@ -184,57 +192,57 @@ QUESTION: [ask a simple question about the image]
 ANSWER: [the correct answer]
 ---`;
 
-  const gptResponse = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ]
-  });
+      const gptResponse = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ]
+      });
 
-  const output = gptResponse.choices[0].message.content.trim();
+      const output = gptResponse.choices[0].message.content.trim();
 
-  // 🧠 Parse GPT output
-  const imagePrompt = output.match(/IMAGE_PROMPT:\s*(.+)/)?.[1]?.trim();
-  const question = output.match(/QUESTION:\s*(.+)/)?.[1]?.trim();
-  const answer = output.match(/ANSWER:\s*(.+)/)?.[1]?.trim();
+      // 🧠 Parse GPT output
+      const imagePrompt = output.match(/IMAGE_PROMPT:\s*(.+)/)?.[1]?.trim();
+      const question = output.match(/QUESTION:\s*(.+)/)?.[1]?.trim();
+      const answer = output.match(/ANSWER:\s*(.+)/)?.[1]?.trim();
 
-  if (!imagePrompt || !question || !answer) {
-    throw new Error("GPT output format error. Please retry.");
-  }
+      if (!imagePrompt || !question || !answer) {
+        throw new Error("GPT output format error. Please retry.");
+      }
 
-  // 🎨 Generate image
-  const imageResult = await openai.images.generate({
-    model: "dall-e-3",
-    prompt: imagePrompt,
-    size: "1024x1024",
-    response_format: "url"
-  });
+      // 🎨 Generate image
+      const imageResult = await openai.images.generate({
+        model: "dall-e-3",
+        prompt: imagePrompt,
+        size: "1024x1024",
+        response_format: "url"
+      });
 
-  return {
-    imageUrl: imageResult.data[0].url,
-    question,
-    answer
-  };
-},
+      return {
+        imageUrl: imageResult.data[0].url,
+        question,
+        answer
+      };
+    },
 
-evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
-  const systemPrompt = "You are a fun, encouraging science teacher for kids. If the answer is correct, praise them. If it's wrong, gently explain the right answer.";
+    evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
+      const systemPrompt = "You are a fun, encouraging science teacher for kids. If the answer is correct, praise them. If it's wrong, gently explain the right answer.";
 
-  const userPrompt = `Here's the question: "${question}". The child answered: "${userAnswer}". What should I say back to them? Keep it short and kind.`;
+      const userPrompt = `Here's the question: "${question}". The child answered: "${userAnswer}". What should I say back to them? Keep it short and kind.`;
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ]
-  });
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ]
+      });
 
-  return {
-    feedback: response.choices[0].message.content
-  };
-}
+      return {
+        feedback: response.choices[0].message.content
+      };
+    }
 
 
   },
@@ -298,75 +306,159 @@ evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
       return { token, child };
     },
 
-   createAssignment: async (_, { childId, title, description, questions, difficulty }, { req }) => { // Add 'difficulty' here
-  const user = req.user;
-  if (!user || user.role !== 'PARENT') throw new Error('Unauthorized');
+    createAssignment: async (_, { childId, title, description, questions, difficulty }, { req }) => { // Add 'difficulty' here
+      const user = req.user;
+      if (!user || user.role !== 'PARENT') throw new Error('Unauthorized');
 
-  const assignment = await Assignment.create({
-    title,
-    description,
-    child: childId,
-    questions,
-    difficulty,
-  });
+      const assignment = await Assignment.create({
+        title,
+        description,
+        child: childId,
+        questions,
+        difficulty,
+      });
 
-  return assignment;
-},
+      return assignment;
+    },
 
     updateAssignmentStatus: async (_, { assignmentId, status, responses }, { req }) => {
       const child = req.child;
       if (!child) throw new Error("Unauthorized");
 
+      // Find the assignment and ensure it belongs to the child
       const assignment = await Assignment.findOne({ _id: assignmentId, child: child._id });
-      if (!assignment) throw new Error("Assignment not found");
+      if (!assignment) throw new Error("Assignment not found or does not belong to this child.");
 
+      // Set basic status and responses
       assignment.status = status;
       if (responses) assignment.responses = responses;
-      assignment.completedAt = new Date();
-      await assignment.save();
+      assignment.completedAt = new Date(); // Set completion date
 
-      // 1️⃣ XP logic
-      let xpGained = 1;
-      if (assignment.difficulty === 'MEDIUM') xpGained = 2;
-      else if (assignment.difficulty === 'HARD') xpGained = 3;
+      // --- Start: Evaluation Logic ---
+      let totalCorrect = 0;
+      const evaluationResults = [];
+
+      if (status === 'COMPLETED' && responses && assignment.questions && assignment.questions.length > 0) {
+        assignment.questions.forEach((question, index) => {
+          const studentResponse = responses.find(r => r.questionIndex === index);
+          let isCorrect = false;
+          let feedback = "";
+
+          if (studentResponse) {
+            const studentAnswerClean = studentResponse.answer ? studentResponse.answer.trim().toLowerCase() : '';
+            const correctAnswerClean = question.answer ? question.answer.trim().toLowerCase() : '';
+
+            // CRUCIAL: Robust string comparison for auto-evaluation
+            if (question.type === 'MULTIPLE_CHOICE' || question.type === 'TRUE_FALSE' || question.type === 'SHORT_ANSWER') {
+              isCorrect = studentAnswerClean === correctAnswerClean;
+            } else if (question.type === 'EXPLAIN') {
+              // For 'EXPLAIN' type, auto-evaluation is tricky.
+              // For now, it defaults to incorrect unless a more sophisticated AI check is added.
+              // You might want to leave these for manual parent evaluation.
+              isCorrect = false;
+              feedback = "This type of question requires manual review by your parent.";
+            }
+
+            if (isCorrect) {
+              totalCorrect++;
+              feedback = "Correct! 🎉";
+            } else {
+              feedback = `Your answer "${studentResponse.answer}" was incorrect.`;
+              if (question.answer) {
+                 feedback += ` The correct answer was "${question.answer}".`;
+              }
+            }
+          } else {
+            // If a question was skipped (no response provided)
+            isCorrect = false;
+            feedback = "No response provided for this question.";
+          }
+
+          evaluationResults.push({ questionIndex: index, isCorrect, feedback });
+        });
+
+        // Calculate overall score
+        const score = (totalCorrect / assignment.questions.length) * 100;
+
+        // Update the assignment document with the evaluation results
+        assignment.totalCorrect = totalCorrect;
+        assignment.score = score;
+        assignment.evaluation = evaluationResults;
+        assignment.status = 'EVALUATED'; // Set status to EVALUATED after scoring
+      }
+      // --- End: Evaluation Logic ---
+
+      await assignment.save(); // Save all changes including evaluation, score, totalCorrect
+
+      // 1️⃣ XP logic - now uses calculated score for more nuanced XP
+      let xpGained = 0; // Initialize XP gained
+      if (assignment.status === 'EVALUATED') { // Only give XP if evaluated
+          if (assignment.difficulty === 'EASY') xpGained = 10;
+          else if (assignment.difficulty === 'MEDIUM') xpGained = 20;
+          else if (assignment.difficulty === 'HARD') xpGained = 30;
+
+          // Optional: Adjust XP based on score
+          if (assignment.score > 90) xpGained *= 1.2; // 20% bonus for high score
+          else if (assignment.score < 50) xpGained *= 0.5; // Half XP for low score
+          xpGained = Math.round(xpGained); // Round to nearest whole number
+      }
+
 
       const targetChild = await Child.findById(child._id);
-      targetChild.xp = (targetChild.xp || 0) + xpGained;
+      if (targetChild) { // Ensure child exists before updating
+        targetChild.xp = (targetChild.xp || 0) + xpGained;
 
-      // 2️⃣ Badge logic
-      const badges = new Set(targetChild.badges || []);
-      const completedCount = await Assignment.countDocuments({ child: child._id, status: 'COMPLETED' });
+        // 2️⃣ Badge logic - Recalculate completed count including 'EVALUATED'
+        const badges = new Set(targetChild.badges || []);
+        const completedCount = await Assignment.countDocuments({ child: child._id, status: { $in: ['COMPLETED', 'EVALUATED'] } });
 
-      if (completedCount === 0) {
-        badges.add('First Task');
-        await pushParentNotification(child._id, `${child.name} unlocked the "First Task" badge! 🏅`);
+        if (completedCount === 1 && !badges.has('First Task')) { // Check for exactly 1 completed assignment
+          badges.add('First Task');
+          await pushParentNotification(child._id, `${child.name} unlocked the "First Task" badge! 🏅`);
+        }
+        if (completedCount >= 3 && !badges.has('Task Master')) {
+          badges.add('Task Master');
+          await pushParentNotification(child._id, `${child.name} unlocked the "Task Master" badge! 🏅`);
+        }
+        if (targetChild.xp >= 10 && !badges.has('Rising Star')) {
+          badges.add('Rising Star');
+          await pushParentNotification(child._id, `${child.name} unlocked the "Rising Star" badge! 🏅`);
+        }
+        // 'Hard Worker' badge now considers score for HARD assignments
+        if (assignment.difficulty === 'HARD' && assignment.score >= 70 && !badges.has('Hard Worker')) {
+          badges.add('Hard Worker');
+          await pushParentNotification(child._id, `${child.name} unlocked the "Hard Worker" badge! 🏅`);
+        }
+
+        targetChild.badges = Array.from(badges);
+        await targetChild.save();
+
+        // 3️⃣ Parent XP notification
+        await pushParentNotification(
+          child._id,
+          `${child.name} completed "${assignment.title}" (Score: ${assignment.score.toFixed(0)}%, XP: +${xpGained.toFixed(0)})`
+        );
       }
 
-      if (completedCount + 1 >= 3 && !badges.has('Task Master')) {
-        badges.add('Task Master');
-        await pushParentNotification(child._id, `${child.name} unlocked the "Task Master" badge! 🏅`);
-      }
-
-      if (targetChild.xp >= 10 && !badges.has('Rising Star')) {
-        badges.add('Rising Star');
-        await pushParentNotification(child._id, `${child.name} unlocked the "Rising Star" badge! 🏅`);
-      }
-
-      if (assignment.difficulty === 'HARD' && !badges.has('Hard Worker')) {
-        badges.add('Hard Worker');
-        await pushParentNotification(child._id, `${child.name} unlocked the "Hard Worker" badge! 🏅`);
-      }
-
-      targetChild.badges = Array.from(badges);
-      await targetChild.save();
-
-      // 3️⃣ Parent XP notification
-      await pushParentNotification(
-        child._id,
-        `${child.name} completed "${assignment.title}" (${assignment.difficulty}) — +${xpGained} XP`
-      );
-
-      return assignment;
+      // ⭐ CRITICAL: Return the *fully updated* assignment object,
+      // ensuring all fields align with your GraphQL schema.
+      // Use .toObject() to convert Mongoose document to a plain JavaScript object
+      // before spreading, and explicitly format dates/IDs.
+      return {
+          ...assignment.toObject(),
+          id: assignment._id.toString(), // Ensure ID is a string
+          createdAt: assignment.createdAt?.toISOString(),
+          completedAt: assignment.completedAt?.toISOString() || null,
+          // Mongoose .toObject() should include totalCorrect, score, evaluation
+          // as they are now saved on the document.
+          // Ensure nested objects like questions, responses, evaluation are also plain objects
+          // if they contain Mongoose sub-document methods that might cause issues.
+          // For evaluation, it's already an array of plain objects due to `evaluationResults`
+          // and the schema definition.
+          questions: assignment.questions ? assignment.questions.map(q => q.toObject ? q.toObject() : q) : [],
+          responses: assignment.responses ? assignment.responses.map(r => r.toObject ? r.toObject() : r) : [],
+          evaluation: assignment.evaluation ? assignment.evaluation.map(e => e.toObject ? e.toObject() : e) : [],
+      };
     },
 
     // Update assignment feedback
@@ -380,7 +472,18 @@ evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
       assignment.feedback = feedback;
       await assignment.save();
 
-      return assignment;
+      // Return the updated assignment with all fields expected by GraphQL schema
+      return {
+          ...assignment.toObject(),
+          id: assignment._id.toString(),
+          createdAt: assignment.createdAt?.toISOString(),
+          completedAt: assignment.completedAt?.toISOString() || null,
+          totalCorrect: assignment.totalCorrect || 0,
+          score: assignment.score || 0,
+          evaluation: assignment.evaluation || [],
+          questions: assignment.questions ? assignment.questions.map(q => q.toObject ? q.toObject() : q) : [],
+          responses: assignment.responses ? assignment.responses.map(r => r.toObject ? r.toObject() : r) : [],
+      };
     },
 
     // Save trivia score
@@ -391,7 +494,7 @@ evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
       });
 
       return {
-        id: result._id,
+        id: result._id.toString(), // Ensure ID is string
         childId: result.childId.toString(),
         score: result.score,
         date: result.date.toISOString(),
@@ -403,7 +506,7 @@ evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
       const child = await Child.findById(childId);
       if (!child) throw new Error("Child not found");
 
-      child.xp += xp;
+      child.xp = (child.xp || 0) + xp; // Ensure xp is initialized if null
       await child.save();
 
       return child;
@@ -422,5 +525,40 @@ evaluatePuzzleAnswer: async (_, { question, userAnswer }) => {
       return child;
     },
 
+    evaluateAssignmentResponse: async (_, { childId, assignmentId, evaluation }, context) => {
+      // Check if user is a parent
+      if (!context.user || context.user.role !== 'PARENT') {
+        throw new Error('Unauthorized');
+      }
+
+      // Find assignment
+      const assignment = await Assignment.findOne({ _id: assignmentId, 'child': childId });
+
+      if (!assignment) {
+        throw new Error('Assignment not found');
+      }
+
+      // Count total correct answers
+      const totalCorrect = evaluation.filter(e => e.isCorrect).length;
+      const totalQuestions = assignment.questions.length; // Use actual questions length for score base
+      const score = (totalCorrect / totalQuestions) * 100;
+
+      // Save evaluation results
+      assignment.evaluation = evaluation;
+      assignment.totalCorrect = totalCorrect;
+      assignment.score = score;
+      assignment.status = 'EVALUATED'; // Set status to EVALUATED
+
+      await assignment.save();
+
+      return {
+        assignmentId: assignment._id.toString(),
+        responses: assignment.responses || [], // ✅ guaranteed array
+        evaluation,
+        totalCorrect,
+        score,
+      };
+
+    }
   } // <--- Closing brace for the Mutation object
 }; // <--- Closing brace for the module.exports object. NO SEMICOLON AFTER THIS!

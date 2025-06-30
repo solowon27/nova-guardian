@@ -11,14 +11,30 @@ const questionSchema = new mongoose.Schema({
     required: true,
   },
   options: {
-    type: [String], // Used for MCQ and TRUE_FALSE
+    type: [String],
     default: undefined,
   },
   answer: {
-    type: String, // Optional for auto-evaluation
+    type: String,
     default: '',
   },
 });
+
+// ✅ Add AnswerEvaluation schema
+const evaluationSchema = new mongoose.Schema({
+  questionIndex: {
+    type: Number,
+    required: true,
+  },
+  isCorrect: {
+    type: Boolean,
+    required: true,
+  },
+  feedback: {
+    type: String,
+    default: '',
+  }
+}, { _id: false });
 
 const assignmentSchema = new mongoose.Schema({
   title: {
@@ -35,12 +51,12 @@ const assignmentSchema = new mongoose.Schema({
     required: true,
   },
   questions: {
-    type: [questionSchema], // 💡 Embed question schema
+    type: [questionSchema],
     default: [],
   },
   status: {
     type: String,
-    enum: ['PENDING', 'COMPLETED'],
+    enum: ['PENDING', 'COMPLETED', 'EVALUATED'], // 💡 Added "EVALUATED"
     default: 'PENDING',
   },
   points: {
@@ -66,15 +82,27 @@ const assignmentSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
- responses: {
-  type: [
-    {
-      questionIndex: Number,
-      answer: String,
-    }
-  ],
-  default: [],
-},
+  responses: {
+    type: [
+      {
+        questionIndex: Number,
+        answer: String,
+      }
+    ],
+    default: [],
+  },
+  evaluation: {
+    type: [evaluationSchema],  // ✅ New field
+    default: [],
+  },
+  totalCorrect: {
+    type: Number,
+    default: 0,
+  },
+  score: {
+    type: Number,
+    default: 0,
+  },
 });
 
 assignmentSchema.pre('save', function (next) {

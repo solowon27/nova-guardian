@@ -4,18 +4,16 @@ import { gql, useMutation, useQuery } from '@apollo/client';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
-// --- GraphQL Queries and Mutations (UNCHANGED, assuming these are properly defined elsewhere) ---
+// --- GraphQL Queries and Mutations
 // Make sure these paths are correct for your project
-import { GET_PARENT_NOTIFICATIONS } from '@/graphql/queries';
-import { GET_CHILDREN } from '@/graphql/queries';
-import { GET_ASSIGNMENTS_FOR_CHILD } from '@/graphql/queries';
-import { CREATE_ASSIGNMENT, UPDATE_ASSIGNMENT_FEEDBACK } from '@/graphql/mutations';
+import { GET_PARENT_NOTIFICATIONS, GET_CHILDREN, GET_ASSIGNMENTS_FOR_CHILD } from '@/graphql/queries';
+import { CREATE_ASSIGNMENT, UPDATE_ASSIGNMENT_FEEDBACK, EVALUATE_ASSIGNMENT_RESPONSE } from '@/graphql/mutations';
 
-// --- TypeScript Interfaces (UNCHANGED) ---
 
+// --- TypeScript Interfaces
 type QuestionType = 'EXPLAIN' | 'SHORT_ANSWER' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
 type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
-type AssignmentStatus = 'COMPLETED' | 'IN_PROGRESS' | 'NEW';
+type AssignmentStatus = 'COMPLETED' | 'IN_PROGRESS' | 'NEW' | 'EVALUATED'; // Added EVALUATED status
 
 interface Child {
   id: string;
@@ -33,12 +31,18 @@ interface Question {
   type: QuestionType;
   prompt: string;
   options?: string[];
-  answer?: string;
+  answer?: string; // The correct answer set by parent
 }
 
 interface Response {
   questionIndex: number;
-  answer: string;
+  answer: string; // The child's submitted answer
+}
+
+interface AnswerEvaluation {
+  questionIndex: number;
+  isCorrect: boolean;
+  feedback?: string;
 }
 
 interface Assignment {
@@ -49,7 +53,12 @@ interface Assignment {
   status: AssignmentStatus;
   questions: Question[];
   responses: Response[];
-  feedback?: string;
+  evaluation?: AnswerEvaluation[]; // Evaluation results from parent
+  feedback?: string; // Overall feedback for the assignment
+  totalCorrect?: number;
+  score?: number;
+  createdAt: string;
+  completedAt?: string;
 }
 
 interface GetChildrenData {
@@ -77,6 +86,24 @@ interface UpdateAssignmentFeedbackVariables {
   feedback: string;
 }
 
+// New Interfaces for Evaluation
+interface EvaluateAssignmentResponseVariables {
+  childId: string;
+  assignmentId: string;
+  evaluation: AnswerEvaluation[];
+}
+
+interface EvaluateAssignmentResponseData {
+  evaluateAssignmentResponse: {
+    assignmentId: string;
+    responses: Response[];
+    evaluation: AnswerEvaluation[];
+    totalCorrect: number;
+    score: number;
+  };
+}
+
+
 export default function ParentDashboard() {
   const router = useRouter();
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
@@ -86,7 +113,13 @@ export default function ParentDashboard() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [feedbackMap, setFeedbackMap] = useState<{ [key: string]: string }>({});
   const [showAllNotifications, setShowAllNotifications] = useState<boolean>(false);
-  const [showAssignmentCreation, setShowAssignmentCreation] = useState<boolean>(true); // New state to toggle form visibility
+  const [showAssignmentCreation, setShowAssignmentCreation] = useState<boolean>(true);
+
+  // New state for evaluation
+  const [assignmentToEvaluate, setAssignmentToEvaluate] = useState<Assignment | null>(null);
+  const [currentEvaluation, setCurrentEvaluation] = useState<AnswerEvaluation[]>([]);
+  const [overallAssignmentFeedback, setOverallAssignmentFeedback] = useState<string>('');
+
 
   // --- Data Fetching ---
   const { data: childrenData, loading: childrenLoading, error: childrenError } = useQuery<GetChildrenData>(GET_CHILDREN);
@@ -95,7 +128,6 @@ export default function ParentDashboard() {
     GET_PARENT_NOTIFICATIONS,
     {
       variables: { limit: showAllNotifications ? null : 5 },
-      // Polling for real-time notifications (adjust interval as needed)
       pollInterval: 30000 // Refetch every 30 seconds
     }
   );
@@ -127,14 +159,10 @@ export default function ParentDashboard() {
 
   const [updateFeedback, { loading: updateFeedbackLoading }] = useMutation<any, UpdateAssignmentFeedbackVariables>(UPDATE_ASSIGNMENT_FEEDBACK, {
     onCompleted: () => {
-      alert('📝 Feedback submitted!');
+      alert('📝 Overall feedback submitted!');
       refetchAssignments(); // Refetch assignments to show updated feedback
-      setFeedbackMap(prev => {
-        const newMap = { ...prev };
-        // Delete the feedback from the local state after successful submission
-        delete newMap[Object.keys(newMap)[0]]; // A bit hacky, better to pass assignmentId to onCompleted
-        return newMap;
-      });
+      setOverallAssignmentFeedback(''); // Clear after submission
+      setAssignmentToEvaluate(null); // Close evaluation view
     },
     onError: (err) => {
       console.error('Error submitting feedback:', err);
@@ -142,12 +170,49 @@ export default function ParentDashboard() {
     }
   });
 
+  // New Mutation for evaluating individual questions
+  const [evaluateAssignmentResponses, { loading: evaluateLoading }] = useMutation<EvaluateAssignmentResponseData, EvaluateAssignmentResponseVariables>(
+    EVALUATE_ASSIGNMENT_RESPONSE,
+    {
+      onCompleted: (data) => {
+        alert('✅ Assignment evaluation submitted!');
+        refetchAssignments(); // Refetch to get updated assignment status and score
+        setAssignmentToEvaluate(null); // Close the evaluation modal/view
+        setCurrentEvaluation([]); // Clear current evaluation state
+        setOverallAssignmentFeedback(''); // Clear any pending overall feedback
+      },
+      onError: (err) => {
+        console.error('Error evaluating assignment:', err);
+        alert(`Failed to evaluate assignment: ${err.message}`);
+      }
+    }
+  );
+
+
   // --- Effects ---
   useEffect(() => {
     if (selectedChild) {
       refetchAssignments();
     }
   }, [selectedChild, refetchAssignments]);
+
+  // Reset evaluation state when assignmentToEvaluate changes
+  useEffect(() => {
+    if (assignmentToEvaluate) {
+      // Initialize currentEvaluation with existing evaluation or empty array
+      const initialEvaluation = assignmentToEvaluate.evaluation || [];
+      const questionsWithInitialEvaluation = assignmentToEvaluate.questions.map((_, index) => {
+        const existingEval = initialEvaluation.find(e => e.questionIndex === index);
+        return existingEval || { questionIndex: index, isCorrect: false, feedback: '' };
+      });
+      setCurrentEvaluation(questionsWithInitialEvaluation);
+      setOverallAssignmentFeedback(assignmentToEvaluate.feedback || '');
+    } else {
+      setCurrentEvaluation([]);
+      setOverallAssignmentFeedback('');
+    }
+  }, [assignmentToEvaluate]);
+
 
   // --- Handlers ---
   const handleSelectChild = (child: Child) => {
@@ -158,6 +223,7 @@ export default function ParentDashboard() {
     setQuestions([]);
     setFeedbackMap({});
     setShowAssignmentCreation(false); // Hide create form when selecting a new child
+    setAssignmentToEvaluate(null); // Close any active evaluation
   };
 
   const handleAddQuestion = () => {
@@ -248,31 +314,111 @@ export default function ParentDashboard() {
     });
   };
 
-  const handleFeedbackChange = (id: string, value: string) => {
-    setFeedbackMap((prev) => ({ ...prev, [id]: value }));
+  // Old handleFeedbackChange - replaced by handleOverallFeedbackChange and handleEvaluationChange
+  // const handleFeedbackChange = (id: string, value: string) => {
+  //   setFeedbackMap((prev) => ({ ...prev, [id]: value }));
+  // };
+
+  // Old submitFeedback - replaced by handleSaveEvaluationAndFeedback
+  // const submitFeedback = async (assignmentId: string) => {
+  //   const feedbackText = feedbackMap[assignmentId];
+  //   if (!feedbackText || feedbackText.trim() === '') {
+  //     alert('Feedback cannot be empty!');
+  //     return;
+  //   }
+  //   try {
+  //     await updateFeedback({
+  //       variables: { assignmentId, feedback: feedbackText },
+  //     });
+  //   } catch (err: any) {
+  //     console.error('Error submitting feedback:', err);
+  //     alert(`Failed to submit feedback: ${err.message}`);
+  //   }
+  // };
+
+
+  // New Handlers for Evaluation Feature
+  const handleOpenEvaluation = (assignment: Assignment) => {
+    setAssignmentToEvaluate(assignment);
   };
 
-  const submitFeedback = async (assignmentId: string) => {
-    const feedbackText = feedbackMap[assignmentId];
-    if (!feedbackText || feedbackText.trim() === '') {
-      alert('Feedback cannot be empty!');
+  const handleCloseEvaluation = () => {
+    setAssignmentToEvaluate(null);
+  };
+
+  const handleEvaluationChange = (questionIndex: number, isCorrect: boolean, feedback: string) => {
+    setCurrentEvaluation(prev => {
+      const existingIndex = prev.findIndex(e => e.questionIndex === questionIndex);
+      if (existingIndex > -1) {
+        const updated = [...prev];
+        updated[existingIndex] = { questionIndex, isCorrect, feedback };
+        return updated;
+      }
+      return [...prev, { questionIndex, isCorrect, feedback }];
+    });
+  };
+
+  const handleOverallFeedbackChange = (value: string) => {
+    setOverallAssignmentFeedback(value);
+  };
+
+  const handleSaveEvaluationAndFeedback = async () => {
+    if (!selectedChild || !assignmentToEvaluate) {
+      alert('No child or assignment selected for evaluation.');
       return;
     }
+
+    if (currentEvaluation.length !== assignmentToEvaluate.questions.length) {
+      alert('Please evaluate all questions before submitting.');
+      return;
+    }
+
+    const allEvaluated = currentEvaluation.every(evalItem =>
+      typeof evalItem.isCorrect === 'boolean' && evalItem.feedback !== undefined
+    );
+
+    if (!allEvaluated) {
+        alert('Please provide a correctness status and feedback for all questions.');
+        return;
+    }
+
     try {
-      await updateFeedback({
-        variables: { assignmentId, feedback: feedbackText },
+      // First, submit the individual question evaluations
+      await evaluateAssignmentResponses({
+        variables: {
+          childId: selectedChild.id,
+          assignmentId: assignmentToEvaluate.id,
+          evaluation: currentEvaluation.map(e => ({
+            questionIndex: e.questionIndex,
+            isCorrect: e.isCorrect,
+            feedback: e.feedback || '', // Ensure feedback is a string
+          })),
+        },
       });
-    } catch (err: any) {
-      console.error('Error submitting feedback:', err);
-      alert(`Failed to submit feedback: ${err.message}`);
+
+      // Then, if there's overall feedback, submit it
+      if (overallAssignmentFeedback.trim() !== '') {
+        await updateFeedback({
+          variables: {
+            assignmentId: assignmentToEvaluate.id,
+            feedback: overallAssignmentFeedback,
+          },
+        });
+      }
+
+      // The onCompleted of evaluateAssignmentResponses will refetch assignments and close modal
+    } catch (error) {
+      console.error('Error during evaluation submission:', error);
+      alert(`Failed to complete evaluation: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
+
 
   // --- UI Calculations ---
   const assignmentProgress = (() => {
     if (!assignmentsData?.getAssignmentsForChild?.length) return 0;
     const total = assignmentsData.getAssignmentsForChild.length;
-    const completed = assignmentsData.getAssignmentsForChild.filter((a) => a.status === 'COMPLETED').length;
+    const completed = assignmentsData.getAssignmentsForChild.filter((a) => a.status === 'COMPLETED' || a.status === 'EVALUATED').length; // Consider EVALUATED as completed
     return Math.round((completed / total) * 100);
   })();
 
@@ -640,136 +786,183 @@ export default function ParentDashboard() {
             {/* Assignments for Selected Child Section */}
             <section className="bg-white p-8 rounded-2xl shadow-xl border border-blue-100 animate-fade-in">
               <h2 className="text-3xl font-bold text-indigo-700 mb-8 flex items-center">
-                <span className=" text-green-500">✅</span> Assignments for {selectedChild.name}
+                <span className="mr-3 text-yellow-500 text-4xl">📚</span> Assignments for {selectedChild.name}
               </h2>
+
               {assignmentsLoading ? (
-                <div className="flex items-center justify-center p-8 bg-gray-50 rounded-xl shadow-inner">
-                  <svg className="animate-spin h-8 w-8 text-gray-400 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <div className="text-center p-6 text-gray-600">
+                  <svg className="animate-spin h-8 w-8 text-blue-500 mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  <p className="text-center text-gray-500 italic text-lg">Loading assignments...</p>
+                  Loading assignments...
                 </div>
               ) : assignmentsData?.getAssignmentsForChild?.length === 0 ? (
-                <p className="text-gray-500 italic text-lg text-center p-6 bg-gray-50 rounded-xl border border-gray-200 shadow-sm">
-                  No assignments created for {selectedChild.name} yet. Time to create some!
-                </p>
+                <div className="text-gray-500 italic p-4 bg-yellow-50 rounded-xl text-center border border-yellow-200 shadow-sm">
+                  No assignments found for {selectedChild.name}. Create one above!
+                </div>
               ) : (
-                <div className="space-y-6">
-                  {assignmentsData?.getAssignmentsForChild?.map((assignment: Assignment) => {
-                    const statusColor = {
-                      'COMPLETED': 'bg-green-100 text-green-800 border-green-300',
-                      'IN_PROGRESS': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-                      'NEW': 'bg-blue-100 text-blue-800 border-blue-300',
-                    }[assignment.status] || 'bg-gray-100 text-gray-800 border-gray-300';
-
-                    const difficultyColors = {
-                      EASY: 'text-green-600 font-extrabold',
-                      MEDIUM: 'text-yellow-600 font-extrabold',
-                      HARD: 'text-red-600 font-extrabold',
-                    };
-
-                    return (
-                      <div key={assignment.id} className="p-7 border rounded-2xl shadow-md bg-white hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-                          <div>
-                            <h3 className="font-extrabold text-2xl text-blue-800 mb-1">{assignment.title}</h3>
-                            <p className={`text-sm ${difficultyColors[assignment.difficulty] || 'text-gray-600'}`}>
-                              Difficulty: {assignment.difficulty || 'N/A'}
-                            </p>
-                          </div>
-                          <span
-                            className={`mt-2 sm:mt-0 px-4 py-1.5 rounded-full text-sm font-semibold border ${statusColor}`}
-                          >
-                            {assignment.status.replace('_', ' ')}
-                          </span>
+                <ul className="space-y-6">
+                  {assignmentsData?.getAssignmentsForChild?.map((assignment) => (
+                    <li
+                      key={assignment.id}
+                      className="bg-gray-50 p-6 rounded-2xl shadow-md border border-gray-200 hover:shadow-lg transition-shadow duration-300"
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-2xl font-bold text-indigo-600 mb-2">{assignment.title}</h3>
+                          <p className="text-gray-600 mb-1">Difficulty: <span className={`font-semibold ${assignment.difficulty === 'EASY' ? 'text-green-600' : assignment.difficulty === 'MEDIUM' ? 'text-yellow-600' : 'text-red-600'}`}>{assignment.difficulty}</span></p>
+                          <p className="text-gray-600">Status: <span className={`font-semibold ${assignment.status === 'COMPLETED' || assignment.status === 'EVALUATED' ? 'text-green-600' : assignment.status === 'IN_PROGRESS' ? 'text-yellow-600' : 'text-blue-600'}`}>{assignment.status.replace('_', ' ')}</span></p>
                         </div>
-                        <p className="text-gray-700 mb-5 text-base">
-                          {assignment.description}
-                        </p>
-
-                        {/* Display Questions and Responses */}
-                        {assignment.questions && assignment.questions.length > 0 && (
-                          <div className="mt-6 space-y-4">
-                            <h4 className="text-xl font-bold text-gray-700 border-b pb-2 mb-4">Questions & Child's Responses:</h4>
-                            {assignment.questions.map((question, qIndex) => {
-                              const childResponse = assignment.responses?.find(r => r.questionIndex === qIndex);
-                              return (
-                                <div key={qIndex} className="bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-inner">
-                                  <p className="font-semibold text-gray-800 mb-2">
-                                    Q{qIndex + 1}. ({question.type.replace('_', ' ')}) {question.prompt}
-                                  </p>
-                                  {question.type === 'MULTIPLE_CHOICE' && question.options && (
-                                    <div className="ml-4 text-sm text-gray-600">
-                                      Options: {question.options.join(', ')}
-                                    </div>
-                                  )}
-                                  {question.answer && (
-                                    <p className="text-sm text-blue-600 font-medium mb-2">
-                                      Correct Answer: {question.answer}
-                                    </p>
-                                  )}
-                                  {childResponse ? (
-                                    <div className="mt-3 p-3 bg-white rounded-lg border border-indigo-200 shadow-sm">
-                                      <p className="text-indigo-700 font-medium mb-1">Child's Answer:</p>
-                                      <p className="text-indigo-800 italic">{childResponse.answer}</p>
-                                    </div>
-                                  ) : (
-                                    <p className="text-gray-500 italic mt-3">Child has not responded to this question yet.</p>
-                                  )}
+                        <div className="flex flex-col items-end">
+                            {assignment.status === 'COMPLETED' && !assignment.evaluation?.length && ( // Only show evaluate if completed and not yet evaluated
+                                <button
+                                onClick={() => handleOpenEvaluation(assignment)}
+                                className="px-5 py-2 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-colors duration-300 shadow-md text-sm mt-2"
+                                >
+                                Evaluate Answers
+                                </button>
+                            )}
+                            {(assignment.status === 'EVALUATED' || assignment.evaluation?.length > 0) && ( // Show score if evaluated
+                                <div className="text-lg font-bold text-purple-700 mt-2">
+                                Score: {assignment.totalCorrect !== undefined ? assignment.totalCorrect : 'N/A'}/{assignment.questions.length} ({assignment.score !== undefined ? assignment.score.toFixed(0) : 'N/A'}%)
                                 </div>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* Feedback Section */}
-                        <div className="mt-6 p-5 bg-white rounded-xl border border-purple-200 shadow-inner">
-                          <h4 className="text-xl font-bold text-purple-700 mb-3">Your Feedback:</h4>
-                          {assignment.feedback ? (
-                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-300">
-                              <p className="italic text-purple-800">{assignment.feedback}</p>
-                            </div>
-                          ) : (
-                            <div>
-                              <textarea
-                                placeholder="Provide feedback to your child (e.g., 'Great job!', 'Try to explain more here.')"
-                                value={feedbackMap[assignment.id] || ''}
-                                onChange={(e) => handleFeedbackChange(assignment.id, e.target.value)}
-                                rows={3}
-                                className="w-full border border-gray-300 rounded-lg p-3 text-base focus:ring-purple-400 focus:border-purple-400 transition-all duration-200 shadow-sm resize-y"
-                              ></textarea>
-                              <button
-                                onClick={() => submitFeedback(assignment.id)}
-                                disabled={updateFeedbackLoading || !feedbackMap[assignment.id]?.trim()}
-                                className={`mt-3 px-6 py-2 rounded-lg font-semibold text-white transition-all duration-300 flex items-center justify-center ${
-                                  updateFeedbackLoading || !feedbackMap[assignment.id]?.trim()
-                                    ? 'bg-purple-300 cursor-not-allowed'
-                                    : 'bg-purple-600 hover:bg-purple-700 shadow-md'
-                                }`}
-                              >
-                                {updateFeedbackLoading ? (
-                                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                ) : (
-                                    <span className="mr-2">✉️</span>
-                                )}
-                                Submit Feedback
-                              </button>
-                            </div>
-                          )}
+                            )}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {/* Conditionally render detailed view or just summary */}
+                      {/* You specifically asked to see *only* title, difficulty, status after evaluation */}
+                      {/* So, if 'EVALUATED', we won't show description or questions/responses here. */}
+                      {/* But we will show overall feedback if available. */}
+
+                      {assignment.status !== 'EVALUATED' && ( // Only show description and questions if not yet evaluated or only partially evaluated
+                          <p className="text-gray-700 mb-4">{assignment.description}</p>
+                      )}
+
+                      {/* Display Overall Feedback */}
+                      {assignment.feedback && (
+                          <div className="mt-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-800">
+                              <span className="font-semibold">Overall Feedback:</span> {assignment.feedback}
+                          </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
             </section>
           </>
         )}
       </main>
+
+      {/* Evaluation Modal/Sidebar */}
+      {assignmentToEvaluate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-end z-50">
+          <div className="bg-white w-full lg:w-1/2 p-8 overflow-y-auto shadow-2xl relative animate-slide-in-right">
+            <button
+              onClick={handleCloseEvaluation}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-4xl"
+              title="Close"
+            >
+              &times;
+            </button>
+            <h2 className="text-3xl font-bold text-indigo-700 mb-6 flex items-center">
+              <span className="mr-3 text-yellow-500 text-4xl">📝</span> Evaluate: {assignmentToEvaluate.title}
+            </h2>
+            <p className="text-gray-600 mb-4">Child: <span className="font-semibold">{selectedChild?.name}</span></p>
+            <p className="text-gray-600 mb-6">{assignmentToEvaluate.description}</p>
+
+            <div className="space-y-8">
+              {assignmentToEvaluate.questions.map((question, qIndex) => {
+                const childResponse = assignmentToEvaluate.responses?.find(r => r.questionIndex === qIndex);
+                const evaluation = currentEvaluation.find(e => e.questionIndex === qIndex);
+
+                return (
+                  <div key={qIndex} className="p-6 bg-blue-50 border border-blue-200 rounded-xl shadow-inner">
+                    <h4 className="text-xl font-semibold text-gray-800 mb-3">Question {qIndex + 1}: {question.prompt}</h4>
+                    {question.options && question.options.length > 0 && (
+                      <div className="mb-3">
+                        <p className="font-medium text-gray-700">Options:</p>
+                        <ul className="list-disc list-inside text-gray-600">
+                          {question.options.map((option, oIndex) => (
+                            <li key={oIndex}>{option}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {question.answer && (
+                      <p className="mb-3 text-green-700 font-semibold">Correct Answer (Set by you): {question.answer}</p>
+                    )}
+
+                    <p className="mb-4 text-purple-700 font-bold">Child's Answer: <span className="font-normal">{childResponse?.answer || 'No answer submitted'}</span></p>
+
+                    <div className="flex items-center gap-4 mb-4">
+                      <label className="flex items-center text-lg font-semibold text-gray-700">
+                        <input
+                          type="radio"
+                          name={`correct_${qIndex}`}
+                          checked={evaluation?.isCorrect === true}
+                          onChange={() => handleEvaluationChange(qIndex, true, evaluation?.feedback || '')}
+                          className="mr-2 h-5 w-5 text-green-600 border-gray-300 focus:ring-green-500"
+                        />
+                        Correct ✅
+                      </label>
+                      <label className="flex items-center text-lg font-semibold text-gray-700">
+                        <input
+                          type="radio"
+                          name={`correct_${qIndex}`}
+                          checked={evaluation?.isCorrect === false}
+                          onChange={() => handleEvaluationChange(qIndex, false, evaluation?.feedback || '')}
+                          className="mr-2 h-5 w-5 text-red-600 border-gray-300 focus:ring-red-500"
+                        />
+                        Incorrect ❌
+                      </label>
+                    </div>
+                    <div>
+                      <label htmlFor={`feedback_${qIndex}`} className="block text-md font-semibold text-gray-700 mb-2">Feedback for this question:</label>
+                      <textarea
+                        id={`feedback_${qIndex}`}
+                        value={evaluation?.feedback || ''}
+                        onChange={(e) => handleEvaluationChange(qIndex, evaluation?.isCorrect ?? false, e.target.value)}
+                        placeholder="Provide specific feedback..."
+                        rows={2}
+                        className="w-full border border-gray-300 rounded-lg p-2 text-base focus:ring-purple-400 focus:border-purple-400 transition-all duration-200 shadow-sm"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-8 p-6 bg-white border border-gray-200 rounded-xl shadow-md">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Overall Assignment Feedback</h3>
+              <textarea
+                value={overallAssignmentFeedback}
+                onChange={(e) => handleOverallFeedbackChange(e.target.value)}
+                placeholder="Add overall feedback for the assignment..."
+                rows={4}
+                className="w-full border border-gray-300 rounded-lg p-3 text-base focus:ring-purple-400 focus:border-purple-400 transition-all duration-200 shadow-sm"
+              />
+            </div>
+
+            <div className="mt-8 flex justify-end gap-4">
+              <button
+                onClick={handleCloseEvaluation}
+                className="px-6 py-3 bg-gray-300 text-gray-800 rounded-lg font-semibold hover:bg-gray-400 transition-colors duration-300 shadow-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEvaluationAndFeedback}
+                disabled={evaluateLoading || updateFeedbackLoading}
+                className={`px-8 py-3 text-white rounded-lg font-semibold transition-all duration-300 shadow-md ${evaluateLoading || updateFeedbackLoading ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+              >
+                {evaluateLoading || updateFeedbackLoading ? 'Submitting...' : 'Save Evaluation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
