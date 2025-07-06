@@ -1,19 +1,19 @@
 const { gql } = require('apollo-server-express');
 
-module.exports = gql`
-  type User {
-    id: ID!
-    email: String!
+module.exports = gql` type User {
+    _id: ID!
+    name: String
+    email: String
+    username: String
     role: String!
+    age: Int
     children: [Child]
     notifications: [Notification]
   }
 
-  type Parent {
-    id: ID!
-    email: String!
-    password: String!
-    children: [Child]
+  type AuthPayload {
+    token: String!
+    user: User!
   }
 
   type Child {
@@ -22,7 +22,6 @@ module.exports = gql`
     age: Int!
     parent: ID!
     username: String!
-    password: String!
     xp: Int
     badges: [String]
     assignments: [Assignment]
@@ -75,33 +74,27 @@ module.exports = gql`
   }
 
   type Assignment {
-        id: ID!
-        title: String!
-        description: String!
-        status: String!
-        child: Child!
-        questions: [Question]
-        responses: [Response]
-        evaluation: [AnswerEvaluation]
-        createdAt: String!
-        completedAt: String 
-        feedback: String
-        difficulty: String
-        totalCorrect: Int 
-        score: Float
-        }
+    id: ID!
+    title: String!
+    description: String!
+    status: String!
+    child: Child!
+    questions: [Question]
+    responses: [Response]
+    evaluation: [AnswerEvaluation]
+    createdAt: String!
+    completedAt: String
+    feedback: String
+    difficulty: String
+    totalCorrect: Int
+    score: Float
+  }
 
   type TriviaResult {
     id: ID!
     childId: ID!
     score: Int!
     date: String!
-  }
-
-  type AuthPayload {
-    token: String!
-    user: User
-    child: Child
   }
 
   type Notification {
@@ -121,13 +114,13 @@ module.exports = gql`
     feedback: String
   }
 
- type AssignmentResponse {
-  assignmentId: ID!
-  responses: [Response!]!      
-  evaluation: [AnswerEvaluation!] 
-  totalCorrect: Int
-  score: Float
-}
+  type AssignmentResponse {
+    assignmentId: ID!
+    responses: [Response!]!
+    evaluation: [AnswerEvaluation!]
+    totalCorrect: Int
+    score: Float
+  }
 
   type Query {
     getMe: User
@@ -142,23 +135,22 @@ module.exports = gql`
   }
 
   type Mutation {
-    registerParent(email: String!, password: String!): AuthPayload
-    login(email: String!, password: String!): AuthPayload
-    createChildProfile(name: String!, age: Int!, username: String!, password: String!): Child
-    loginChild(username: String!, password: String!): AuthPayload
+    registerParent(name: String!, email: String!, password: String!): AuthPayload!
+    login(email: String, username: String, password: String!): AuthPayload!
+    createChildProfile(name: String!, age: Int!, username: String!, password: String!): Child!
 
-    createAssignment(childId: ID!, title: String!, description: String!, questions: [QuestionInput!]!, difficulty: Difficulty): Assignment
-    updateAssignmentStatus(assignmentId: ID!, status: String!, responses: [ResponseInput]): Assignment
-    updateAssignmentFeedback(assignmentId: ID!, feedback: String!): Assignment
+    createAssignment(childId: ID!, title: String!, description: String!, questions: [QuestionInput!]!, difficulty: Difficulty): Assignment!
+    updateAssignmentStatus(assignmentId: ID!, status: String!, responses: [ResponseInput]): Assignment!
+    updateAssignmentFeedback(assignmentId: ID!, feedback: String!): Assignment!
 
-    saveTriviaScore(childId: ID!, score: Int!): TriviaResult
-    updateChildXP(childId: ID!, xp: Int!): Child
-    addChildBadge(childId: ID!, badge: String!): Child
+    saveTriviaScore(childId: ID!, score: Int!): TriviaResult!
+    updateChildXP(childId: ID!, xp: Int!): Child!
+    addChildBadge(childId: ID!, badge: String!): Child!
 
- evaluateAssignmentResponse(
-    childId: ID!
-    assignmentId: ID!
-    evaluation: [AnswerEvaluationInput!]!
-  ): AssignmentResponse
-}
+    evaluateAssignmentResponse(
+      childId: ID!
+      assignmentId: ID!
+      evaluation: [AnswerEvaluationInput!]!
+    ): AssignmentResponse!
+  }
 `;

@@ -1,170 +1,156 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link'; // Assuming Next.js Link component
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { SVGProps, ReactNode } from 'react';
 
-export default function ContactUs() {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    subject: '',
-    message: '',
-  });
+// --- Icon Components for a professional and consistent look ---
+const IconEnvelope = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+    />
+  </svg>
+);
 
-const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-  const { name, value } = e.target;
-  setFormData((prev) => ({ ...prev, [name]: value }));
-};
+const IconPhone = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 6.75z"
+    />
+  </svg>
+);
 
-const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-  e.preventDefault();
-  console.log('Form submitted:', formData);
-  alert('Thank you for your message! We will get back to you shortly.');
-  setFormData({ name: '', email: '', subject: '', message: '' });
-};
+interface FAQItemProps {
+  title: string;
+  children: ReactNode;
+  isOpen: boolean;
+  onToggle: () => void;
+}
 
+const IconChevronDown = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+  </svg>
+);
+
+// --- Sub-Components for the page ---
+
+const ScrollFadeIn = ({ children }: { children: ReactNode }) => (
+    <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.5 }}
+        transition={{ duration: 0.6 }}
+    >
+        {children}
+    </motion.div>
+);
+
+const FAQItem = ({ title, children, isOpen, onToggle }: FAQItemProps) => (
+  <div className="border-b border-slate-200">
+    <button
+      onClick={onToggle}
+      className="flex w-full items-center justify-between py-6 text-left text-lg font-bold text-gray-800"
+    >
+      <span>{title}</span>
+      <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.3 }}>
+        <IconChevronDown className="h-5 w-5 text-gray-500" />
+      </motion.div>
+    </button>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.4, ease: "easeInOut" }}
+          className="overflow-hidden"
+        >
+          <div className="pb-8 text-gray-600 leading-relaxed text-base">
+            {children}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>
+);
+
+
+// --- Main Contact Us Page Component ---
+export default function ContactUsPage() {
+  const [openAccordion, setOpenAccordion] = useState(0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 font-sans text-gray-800 flex items-center justify-center py-16">
-      <div className="container mx-auto px-6 max-w-4xl bg-white rounded-xl shadow-2xl p-8 md:p-12 border border-blue-100">
-        <h1 className="text-4xl md:text-5xl font-extrabold text-indigo-700 mb-8 text-center drop-shadow-md">
-          Get in Touch
-        </h1>
-        <p className="text-lg text-gray-700 mb-10 text-center max-w-2xl mx-auto">
-          Have questions, feedback, or need assistance? We're here to help! Fill out the form below or reach out to us directly.
-        </p>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          {/* Contact Form */}
-          <div className="lg:order-2">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-              <span className="mr-3 text-blue-500">📝</span> Send Us a Message
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label htmlFor="name" className="block text-md font-medium text-gray-700 mb-2">Your Name</label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 text-base focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="email" className="block text-md font-medium text-gray-700 mb-2">Your Email</label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 text-base focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
-                  placeholder="john.doe@example.com"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="subject" className="block text-md font-medium text-gray-700 mb-2">Subject</label>
-                <input
-                  type="text"
-                  id="subject"
-                  name="subject"
-                  value={formData.subject}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 text-base focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
-                  placeholder="Inquiry about assignments"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="message" className="block text-md font-medium text-gray-700 mb-2">Your Message</label>
-                <textarea
-                  id="message"
-                  name="message"
-                  rows={5}
-                  value={formData.message}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 text-base focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
-                  placeholder="Type your message here..."
-                  required
-                ></textarea>
-              </div>
-              <button
-                type="submit"
-                className="w-full py-3 bg-purple-600 text-white rounded-lg font-bold text-lg shadow-md hover:bg-purple-700 transition-colors duration-300 transform hover:-translate-y-1"
-              >
-                Send Message <span className="ml-2">🚀</span>
-              </button>
-            </form>
-          </div>
-
-          {/* Contact Information */}
-          <div className="lg:order-1 flex flex-col justify-between p-6 bg-blue-50 rounded-xl shadow-inner border border-blue-200">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-                <span className="mr-3 text-purple-500">📞</span> Contact Information
-              </h2>
-              <div className="space-y-4 text-gray-700">
-                <p className="flex items-center text-lg">
-                  <span className="mr-3 text-blue-600">📧</span>
-                  <a href="mailto:support@novaguardian.com" className="hover:underline">support@novaguardian.com</a>
+    <main className="bg-white text-gray-800 font-sans">
+      
+      {/* --- Hero Section --- */}
+      <section className="bg-slate-50 text-center py-24 md:py-32">
+        <div className="container mx-auto px-6 max-w-4xl">
+            <ScrollFadeIn>
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold mb-4 text-gray-900 leading-tight">
+                    Get in Touch
+                </h1>
+                <p className="text-lg md:text-xl text-gray-600">
+                    We're here to help. Reach out with any questions, feedback, or inquiries you may have.
                 </p>
-                <p className="flex items-center text-lg">
-                  <span className="mr-3 text-blue-600">📱</span>
-                  <a href="tel:+1234567890" className="hover:underline">+1 (234) 567-890</a>
-                </p>
-                <p className="flex items-center text-lg">
-                  <span className="mr-3 text-blue-600">📍</span>
-                  123 Learning Lane, Knowledge City, KC 98765
-                </p>
-              </div>
-            </div>
-
-            {/* Social Media Links */}
-            <div className="mt-8">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Follow Us</h3>
-              <div className="flex space-x-5 justify-center lg:justify-start">
-                <a href="#" className="text-blue-600 hover:text-purple-600 transition-colors duration-300 text-3xl" aria-label="Facebook">
-                  {/* Placeholder for Facebook icon */}
-                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm3.5 8h-2v2h2v2h-2v6h-3v-6h-2V10h2V8.5c0-1.657 1.343-3 3-3h3v3z"/></svg>
-                </a>
-                <a href="#" className="text-blue-600 hover:text-purple-600 transition-colors duration-300 text-3xl" aria-label="Twitter">
-                  {/* Placeholder for Twitter icon */}
-                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.707 7.707a1 1 0 00-1.414-1.414L12 10.586l-3.293-3.293a1 1 0 00-1.414 1.414L10.586 12l-3.293 3.293a1 1 0 001.414 1.414L12 13.414l3.293 3.293a1 1 0 001.414-1.414L13.414 12l3.293-3.293z"/></svg>
-                </a>
-                <a href="#" className="text-blue-600 hover:text-purple-600 transition-colors duration-300 text-3xl" aria-label="LinkedIn">
-                  {/* Placeholder for LinkedIn icon */}
-                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-4 15h-2V9h2v8zm-1-8c-.552 0-1-.448-1-1s.448-1 1-1 1 .448 1 1-.448 1-1 1zm7 8h-2v-4c0-1.103-.897-2-2-2s-2 .897-2 2v4h-2V9h2v1.5c.66-.99 1.95-1.5 3-1.5 2.206 0 4 1.794 4 4v4z"/></svg>
-                </a>
-              </div>
-            </div>
-          </div>
+            </ScrollFadeIn>
         </div>
+      </section>
 
-        {/* Optional: Map Embed (placeholder) */}
-        <div className="mt-12 p-4 bg-gray-100 rounded-xl shadow-inner border border-gray-200">
-          <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">Find Us on the Map</h3>
-          <div className="aspect-w-16 aspect-h-9 w-full rounded-lg overflow-hidden shadow-md">
-            {/* Replace with actual Google Maps embed iframe */}
-            <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3153.208154546513!2d-122.0842496846813!3d37.4219999798254!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x808fb5e01b7a6e1d%3A0x7d3e0c0b8b0e8c8!2sGoogleplex!5e0!3m2!1sen!2sus!4v1678901234567!5m2!1sen!2sus"
-              width="100%"
-              height="450"
-              style={{ border: 0 }}
-              allowFullScreen={true}
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              title="Our Location"
-              className="rounded-lg"
-            ></iframe>
-          </div>
+      {/* --- Contact Information Section --- */}
+      <section className="py-20 md:py-24">
+        <div className="container mx-auto px-6 max-w-4xl">
+            <ScrollFadeIn>
+                <div className="grid md:grid-cols-2 gap-8 md:gap-12 text-center">
+                    <div className="bg-slate-50 p-8 rounded-xl">
+                        <IconEnvelope className="h-10 w-10 mx-auto text-blue-600 mb-4" />
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Email Us</h3>
+                        <p className="text-gray-600 mb-3">For support, questions, and partnerships.</p>
+                        <a href="mailto:novaguardian@gmail.com" className="text-lg font-semibold text-blue-600 hover:underline">
+                            novaguardian@gmail.com
+                        </a>
+                    </div>
+                    <div className="bg-slate-50 p-8 rounded-xl">
+                        <IconPhone className="h-10 w-10 mx-auto text-blue-600 mb-4" />
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Call Us</h3>
+                        <p className="text-gray-600 mb-3">I am available Mon-Fri, 9am-5pm.</p>
+                        <a href="tel:+13852070297" className="text-lg font-semibold text-blue-600 hover:underline">
+                            +1 (385) 207-0297
+                        </a>
+                    </div>
+                </div>
+            </ScrollFadeIn>
         </div>
-      </div>
-    </div>
+      </section>
+
+      {/* --- FAQ Section --- */}
+      <section className="py-20 md:py-24 bg-slate-50">
+        <div className="container mx-auto px-6 max-w-3xl">
+            <ScrollFadeIn>
+                <div className="text-center mb-12">
+                    <h2 className="text-3xl font-bold text-gray-900">Frequently Asked Questions</h2>
+                </div>
+                <div className="border-t border-slate-200">
+                    <FAQItem title="How do I add my child to my account?" isOpen={openAccordion === 0} onToggle={() => setOpenAccordion(0)}>
+                        After signing up, you will be prompted to create a profile for your child. Simply enter their name and age, and our system will automatically generate a unique username and password for them. You can manage all child profiles from your parent dashboard.
+                    </FAQItem>
+                    <FAQItem title="Is NovaGuardian safe for my child?" isOpen={openAccordion === 1} onToggle={() => setOpenAccordion(1)}>
+                        Absolutely. Safety is our top priority. Our platform is a closed ecosystem, meaning children can only interact with the content assigned by you. There are no external links, advertisements, or chat features with strangers.
+                    </FAQItem>
+                    <FAQItem title="What kind of assignments can I create?" isOpen={openAccordion === 2} onToggle={() => setOpenAccordion(2)}>
+                        You can create a wide variety of assignments, including multiple-choice questions, true/false, short answers, and open-ended explanatory questions. This flexibility allows you to tailor the learning experience to any subject or skill level.
+                    </FAQItem>
+                </div>
+            </ScrollFadeIn>
+        </div>
+      </section>
+
+    </main>
   );
 }

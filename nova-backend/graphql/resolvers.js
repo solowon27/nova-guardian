@@ -2,13 +2,13 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Child = require('../models/Child');
-const Parent = require('../models/Parent'); // Although not directly used, keeping for consistency if needed elsewhere
+const Parent = require('../models/Parent');
 const Assignment = require('../models/Assignment');
 const { AuthenticationError } = require('apollo-server-express');
 const TriviaResult = require('../models/TriviaResult');
 const { pushParentNotification } = require('../utils/notify');
-const openai = require('../utils/openaiClient'); // Ensure this is set up correctly
-const { loadCache, saveCache } = require('../utils/cache'); // Ensure this is set up correctly
+const openai = require('../utils/openaiClient');
+const { loadCache, saveCache } = require('../utils/cache');
 
 
 const SECRET = process.env.JWT_SECRET;
@@ -27,7 +27,6 @@ module.exports = {
       return await User.findById(user.id).populate('children');
     },
 
-    // Get all children for a parent
     getMyChildren: async (_, __, context) => {
       const parentId = context.req.user?._id;
       if (!parentId) throw new Error("Unauthorized");
@@ -57,17 +56,13 @@ module.exports = {
     getAssignmentsForChild: async (_, { childId }, { req }) => {
       const parent = req.user;
       if (!parent) throw new Error("Unauthorized");
-
-      // 🧠 Safely fetch the child and confirm parent ownership
+      
       const child = await Child.findById(childId).lean();
       if (!child || child.parent.toString() !== parent.id.toString()) {
         throw new Error("Access denied");
       }
 
-      // ✅ Fetch assignments for this child
       const assignments = await Assignment.find({ child: child._id }).lean();
-
-      console.log("📥 Found", assignments.length, "assignments for childId:", childId);
 
       return assignments.map(a => ({
         id: a._id.toString(),
@@ -78,9 +73,9 @@ module.exports = {
         responses: a.responses || [],
         questions: a.questions || [],
         feedback: a.feedback || '',
-        totalCorrect: a.totalCorrect || 0, // Ensure these are included
-        score: a.score || 0,             // Ensure these are included
-        evaluation: a.evaluation || [],  // Ensure these are included
+        totalCorrect: a.totalCorrect || 0,
+        score: a.score || 0,
+        evaluation: a.evaluation || [],
         createdAt: a.createdAt?.toISOString(),
         completedAt: a.completedAt?.toISOString() || null,
       }));
@@ -126,7 +121,6 @@ module.exports = {
         }));
     },
 
-
     getFunImage: async () => {
       const now = Date.now();
       const hoursSince = (now - lastGeneratedAt) / (1000 * 60 * 60);
@@ -150,7 +144,6 @@ module.exports = {
             "content": "Generate a random real-world animal, plant, famous person, or city. For the chosen subject, provide: 1) a fun, imaginative name for the image that hints at its real-world nature, and 2) a short, accurate explanation that helps kids understand what it is and why it’s cool or interesting. Make it highly visual so it can be drawn as a kid-friendly image."
           }
         ]
-
       });
 
       const prompt = promptResponse.choices[0].message.content.trim();
@@ -201,8 +194,7 @@ ANSWER: [the correct answer]
       });
 
       const output = gptResponse.choices[0].message.content.trim();
-
-      // 🧠 Parse GPT output
+      
       const imagePrompt = output.match(/IMAGE_PROMPT:\s*(.+)/)?.[1]?.trim();
       const question = output.match(/QUESTION:\s*(.+)/)?.[1]?.trim();
       const answer = output.match(/ANSWER:\s*(.+)/)?.[1]?.trim();
@@ -210,8 +202,7 @@ ANSWER: [the correct answer]
       if (!imagePrompt || !question || !answer) {
         throw new Error("GPT output format error. Please retry.");
       }
-
-      // 🎨 Generate image
+      
       const imageResult = await openai.images.generate({
         model: "dall-e-3",
         prompt: imagePrompt,
@@ -243,10 +234,7 @@ ANSWER: [the correct answer]
         feedback: response.choices[0].message.content
       };
     }
-
-
   },
-
 
   Mutation: {
     registerParent: async (_, { email, password }) => {
@@ -259,14 +247,39 @@ ANSWER: [the correct answer]
       return { token, user };
     },
 
-    login: async (_, { email, password }) => {
-      const user = await User.findOne({ email });
-      if (!user) throw new Error('Invalid email');
-      const valid = await bcrypt.compare(password, user.password);
-      if (!valid) throw new Error('Invalid password');
+  login: async (_, { email, username, password }) => {
+      let user;
+      let role;
 
-      const token = jwt.sign({ id: user._id, role: user.role }, SECRET);
-      return { token, user };
+      if (email) {
+        user = await User.findOne({ email });
+        if (!user) throw new Error('No parent found with this email.');
+        role = 'PARENT';
+      } else if (username) {
+        user = await Child.findOne({ username });
+        if (!user) throw new Error('No child found with this username.');
+        role = 'CHILD';
+      } else {
+        throw new Error('Please provide an email or username.');
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) throw new Error('Invalid password.');
+
+      const token = jwt.sign({ id: user._id, role }, SECRET, { expiresIn: '7d' });
+      
+      // Return a standardized user object
+      return {
+        token,
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          username: user.username,
+          role,
+          age: user.age, // Include age for child login
+        },
+      };
     },
 
     createChildProfile: async (_, { name, age, username, password }, { req }) => {
@@ -291,22 +304,7 @@ ANSWER: [the correct answer]
       return child;
     },
 
-    loginChild: async (_, { username, password }) => {
-      const child = await Child.findOne({ username });
-      if (!child) throw new Error("Username not found");
-
-      const valid = await bcrypt.compare(password, child.password);
-      if (!valid) throw new Error("Incorrect password");
-
-      const token = jwt.sign(
-        { id: child._id, role: 'CHILD' },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      )
-      return { token, child };
-    },
-
-    createAssignment: async (_, { childId, title, description, questions, difficulty }, { req }) => { // Add 'difficulty' here
+    createAssignment: async (_, { childId, title, description, questions, difficulty }, { req }) => {
       const user = req.user;
       if (!user || user.role !== 'PARENT') throw new Error('Unauthorized');
 
@@ -320,148 +318,39 @@ ANSWER: [the correct answer]
 
       return assignment;
     },
-
+    
+    // ✅ CORRECTED: This function only saves the child's answers and marks the assignment as 'COMPLETED'.
     updateAssignmentStatus: async (_, { assignmentId, status, responses }, { req }) => {
       const child = req.child;
       if (!child) throw new Error("Unauthorized");
 
-      // Find the assignment and ensure it belongs to the child
       const assignment = await Assignment.findOne({ _id: assignmentId, child: child._id });
       if (!assignment) throw new Error("Assignment not found or does not belong to this child.");
-
-      // Set basic status and responses
-      assignment.status = status;
+      
+      assignment.status = status; // This will be 'COMPLETED'
       if (responses) assignment.responses = responses;
-      assignment.completedAt = new Date(); // Set completion date
+      assignment.completedAt = new Date();
 
-      // --- Start: Evaluation Logic ---
-      let totalCorrect = 0;
-      const evaluationResults = [];
-
-      if (status === 'COMPLETED' && responses && assignment.questions && assignment.questions.length > 0) {
-        assignment.questions.forEach((question, index) => {
-          const studentResponse = responses.find(r => r.questionIndex === index);
-          let isCorrect = false;
-          let feedback = "";
-
-          if (studentResponse) {
-            const studentAnswerClean = studentResponse.answer ? studentResponse.answer.trim().toLowerCase() : '';
-            const correctAnswerClean = question.answer ? question.answer.trim().toLowerCase() : '';
-
-            // CRUCIAL: Robust string comparison for auto-evaluation
-            if (question.type === 'MULTIPLE_CHOICE' || question.type === 'TRUE_FALSE' || question.type === 'SHORT_ANSWER') {
-              isCorrect = studentAnswerClean === correctAnswerClean;
-            } else if (question.type === 'EXPLAIN') {
-              // For 'EXPLAIN' type, auto-evaluation is tricky.
-              // For now, it defaults to incorrect unless a more sophisticated AI check is added.
-              // You might want to leave these for manual parent evaluation.
-              isCorrect = false;
-              feedback = "This type of question requires manual review by your parent.";
-            }
-
-            if (isCorrect) {
-              totalCorrect++;
-              feedback = "Correct! 🎉";
-            } else {
-              feedback = `Your answer "${studentResponse.answer}" was incorrect.`;
-              if (question.answer) {
-                 feedback += ` The correct answer was "${question.answer}".`;
-              }
-            }
-          } else {
-            // If a question was skipped (no response provided)
-            isCorrect = false;
-            feedback = "No response provided for this question.";
-          }
-
-          evaluationResults.push({ questionIndex: index, isCorrect, feedback });
-        });
-
-        // Calculate overall score
-        const score = (totalCorrect / assignment.questions.length) * 100;
-
-        // Update the assignment document with the evaluation results
-        assignment.totalCorrect = totalCorrect;
-        assignment.score = score;
-        assignment.evaluation = evaluationResults;
-        assignment.status = 'EVALUATED'; // Set status to EVALUATED after scoring
-      }
-      // --- End: Evaluation Logic ---
-
-      await assignment.save(); // Save all changes including evaluation, score, totalCorrect
-
-      // 1️⃣ XP logic - now uses calculated score for more nuanced XP
-      let xpGained = 0; // Initialize XP gained
-      if (assignment.status === 'EVALUATED') { // Only give XP if evaluated
-          if (assignment.difficulty === 'EASY') xpGained = 10;
-          else if (assignment.difficulty === 'MEDIUM') xpGained = 20;
-          else if (assignment.difficulty === 'HARD') xpGained = 30;
-
-          // Optional: Adjust XP based on score
-          if (assignment.score > 90) xpGained *= 1.2; // 20% bonus for high score
-          else if (assignment.score < 50) xpGained *= 0.5; // Half XP for low score
-          xpGained = Math.round(xpGained); // Round to nearest whole number
-      }
-
-
-      const targetChild = await Child.findById(child._id);
-      if (targetChild) { // Ensure child exists before updating
-        targetChild.xp = (targetChild.xp || 0) + xpGained;
-
-        // 2️⃣ Badge logic - Recalculate completed count including 'EVALUATED'
-        const badges = new Set(targetChild.badges || []);
-        const completedCount = await Assignment.countDocuments({ child: child._id, status: { $in: ['COMPLETED', 'EVALUATED'] } });
-
-        if (completedCount === 1 && !badges.has('First Task')) { // Check for exactly 1 completed assignment
-          badges.add('First Task');
-          await pushParentNotification(child._id, `${child.name} unlocked the "First Task" badge! 🏅`);
-        }
-        if (completedCount >= 3 && !badges.has('Task Master')) {
-          badges.add('Task Master');
-          await pushParentNotification(child._id, `${child.name} unlocked the "Task Master" badge! 🏅`);
-        }
-        if (targetChild.xp >= 10 && !badges.has('Rising Star')) {
-          badges.add('Rising Star');
-          await pushParentNotification(child._id, `${child.name} unlocked the "Rising Star" badge! 🏅`);
-        }
-        // 'Hard Worker' badge now considers score for HARD assignments
-        if (assignment.difficulty === 'HARD' && assignment.score >= 70 && !badges.has('Hard Worker')) {
-          badges.add('Hard Worker');
-          await pushParentNotification(child._id, `${child.name} unlocked the "Hard Worker" badge! 🏅`);
-        }
-
-        targetChild.badges = Array.from(badges);
-        await targetChild.save();
-
-        // 3️⃣ Parent XP notification
-        await pushParentNotification(
-          child._id,
-          `${child.name} completed "${assignment.title}" (Score: ${assignment.score.toFixed(0)}%, XP: +${xpGained.toFixed(0)})`
-        );
-      }
-
-      // ⭐ CRITICAL: Return the *fully updated* assignment object,
-      // ensuring all fields align with your GraphQL schema.
-      // Use .toObject() to convert Mongoose document to a plain JavaScript object
-      // before spreading, and explicitly format dates/IDs.
+      await assignment.save();
+      
+      await pushParentNotification(
+        child._id,
+        `${child.name} has completed the assignment "${assignment.title}". It is ready for your review.`
+      );
+      
       return {
           ...assignment.toObject(),
-          id: assignment._id.toString(), // Ensure ID is a string
+          id: assignment._id.toString(),
           createdAt: assignment.createdAt?.toISOString(),
           completedAt: assignment.completedAt?.toISOString() || null,
-          // Mongoose .toObject() should include totalCorrect, score, evaluation
-          // as they are now saved on the document.
-          // Ensure nested objects like questions, responses, evaluation are also plain objects
-          // if they contain Mongoose sub-document methods that might cause issues.
-          // For evaluation, it's already an array of plain objects due to `evaluationResults`
-          // and the schema definition.
           questions: assignment.questions ? assignment.questions.map(q => q.toObject ? q.toObject() : q) : [],
           responses: assignment.responses ? assignment.responses.map(r => r.toObject ? r.toObject() : r) : [],
-          evaluation: assignment.evaluation ? assignment.evaluation.map(e => e.toObject ? e.toObject() : e) : [],
+          evaluation: [],
+          totalCorrect: 0,
+          score: 0,
       };
     },
 
-    // Update assignment feedback
     updateAssignmentFeedback: async (_, { assignmentId, feedback }, { req }) => {
       const user = req.user;
       if (!user || user.role !== 'PARENT') throw new Error("Unauthorized");
@@ -471,22 +360,20 @@ ANSWER: [the correct answer]
 
       assignment.feedback = feedback;
       await assignment.save();
-
-      // Return the updated assignment with all fields expected by GraphQL schema
+      
       return {
           ...assignment.toObject(),
           id: assignment._id.toString(),
           createdAt: assignment.createdAt?.toISOString(),
           completedAt: assignment.completedAt?.toISOString() || null,
-          totalCorrect: assignment.totalCorrect || 0,
-          score: assignment.score || 0,
-          evaluation: assignment.evaluation || [],
+          score: assignment.score !== undefined ? assignment.score : undefined,
+          totalCorrect: assignment.totalCorrect !== undefined ? assignment.totalCorrect : undefined,
+          evaluation: assignment.evaluation?.length ? assignment.evaluation : undefined,
           questions: assignment.questions ? assignment.questions.map(q => q.toObject ? q.toObject() : q) : [],
           responses: assignment.responses ? assignment.responses.map(r => r.toObject ? r.toObject() : r) : [],
       };
     },
 
-    // Save trivia score
     saveTriviaScore: async (_, { childId, score }) => {
       const result = await TriviaResult.create({
         childId,
@@ -494,25 +381,23 @@ ANSWER: [the correct answer]
       });
 
       return {
-        id: result._id.toString(), // Ensure ID is string
+        id: result._id.toString(),
         childId: result.childId.toString(),
         score: result.score,
         date: result.date.toISOString(),
       };
     },
 
-    // Add XP to a child
     updateChildXP: async (_, { childId, xp }) => {
       const child = await Child.findById(childId);
       if (!child) throw new Error("Child not found");
 
-      child.xp = (child.xp || 0) + xp; // Ensure xp is initialized if null
+      child.xp = (child.xp || 0) + xp;
       await child.save();
 
       return child;
     },
-
-    // Add a badge if not already owned
+    
     addChildBadge: async (_, { childId, badge }) => {
       const child = await Child.findById(childId);
       if (!child) throw new Error("Child not found");
@@ -525,40 +410,66 @@ ANSWER: [the correct answer]
       return child;
     },
 
+    // ✅ CORRECTED: This function handles the parent's manual evaluation and awards XP/badges.
     evaluateAssignmentResponse: async (_, { childId, assignmentId, evaluation }, context) => {
-      // Check if user is a parent
-      if (!context.user || context.user.role !== 'PARENT') {
+      if (!context.req.user || context.req.user.role !== 'PARENT') {
         throw new Error('Unauthorized');
       }
 
-      // Find assignment
-      const assignment = await Assignment.findOne({ _id: assignmentId, 'child': childId });
-
+      const assignment = await Assignment.findOne({ _id: assignmentId, child: childId });
       if (!assignment) {
         throw new Error('Assignment not found');
       }
 
-      // Count total correct answers
       const totalCorrect = evaluation.filter(e => e.isCorrect).length;
-      const totalQuestions = assignment.questions.length; // Use actual questions length for score base
-      const score = (totalCorrect / totalQuestions) * 100;
-
-      // Save evaluation results
+      const totalQuestions = assignment.questions.length;
+      const score = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
+      
       assignment.evaluation = evaluation;
       assignment.totalCorrect = totalCorrect;
       assignment.score = score;
-      assignment.status = 'EVALUATED'; // Set status to EVALUATED
+      assignment.status = 'EVALUATED';
 
+      // --- Moved Reward Logic ---
+      let xpGained = 0;
+      if (assignment.difficulty === 'EASY') xpGained = 10;
+      else if (assignment.difficulty === 'MEDIUM') xpGained = 20;
+      else if (assignment.difficulty === 'HARD') xpGained = 30;
+
+      if (score > 90) xpGained *= 1.2;
+      else if (score < 50) xpGained *= 0.5;
+      xpGained = Math.round(xpGained);
+
+      const targetChild = await Child.findById(childId);
+      if (targetChild) {
+        targetChild.xp = (targetChild.xp || 0) + xpGained;
+
+        const badges = new Set(targetChild.badges || []);
+        const completedCount = await Assignment.countDocuments({ child: childId, status: 'EVALUATED' });
+
+        if (completedCount === 1 && !badges.has('First Task')) badges.add('First Task');
+        if (completedCount >= 3 && !badges.has('Task Master')) badges.add('Task Master');
+        if (targetChild.xp >= 10 && !badges.has('Rising Star')) badges.add('Rising Star');
+        if (assignment.difficulty === 'HARD' && score >= 70 && !badges.has('Hard Worker')) badges.add('Hard Worker');
+        
+        targetChild.badges = Array.from(badges);
+        await targetChild.save();
+        
+        await pushParentNotification(
+          childId,
+          `You evaluated "${assignment.title}" for ${targetChild.name}. Score: ${score.toFixed(0)}%, XP: +${xpGained}`
+        );
+      }
+      
       await assignment.save();
 
       return {
         assignmentId: assignment._id.toString(),
-        responses: assignment.responses || [], // ✅ guaranteed array
+        responses: assignment.responses || [],
         evaluation,
         totalCorrect,
         score,
       };
-
     }
-  } // <--- Closing brace for the Mutation object
-}; // <--- Closing brace for the module.exports object. NO SEMICOLON AFTER THIS!
+  }
+  };

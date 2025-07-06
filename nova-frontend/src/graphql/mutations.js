@@ -15,12 +15,14 @@ export const REGISTER_PARENT = gql`
 `;
 
 export const LOGIN = gql`
-  mutation Login($email: String!, $password: String!) {
-    login(email: $email, password: $password) {
+  mutation Login($email: String!, $username: String,  $password: String!) {
+    login(email: $email, username: $username, password: $password) {
       token
       user {
         id
+        name
         email
+        username
         role
       }
     }
@@ -41,22 +43,6 @@ export const CREATE_CHILD_PROFILE = gql`
     }
   }
 `;
-
-export const LOGIN_CHILD = gql`
-  mutation LoginChild($username: String!, $password: String!) {
-    loginChild(username: $username, password: $password) {
-      token
-      child {
-        id
-        name
-        username
-        xp
-        badges
-      }
-    }
-  }
-`;
-
 // 3. Assignment Management Mutations
 
 export const CREATE_ASSIGNMENT = gql`
@@ -160,7 +146,7 @@ export const EVALUATE_ASSIGNMENT_RESPONSE = gql`
       assignmentId: $assignmentId
       evaluation: $evaluation
     ) {
-      assignmentId: id 
+      assignmentId: assignmentId
       responses {
         questionIndex
         answer
