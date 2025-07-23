@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from '@apollo/client';
+import { useMutation, useQuery, gql } from '@apollo/client';
 import { useState, useEffect, FormEvent, SVGProps, FC } from 'react';
 import { GET_CHILDREN, GET_ASSIGNMENTS_FOR_CHILD } from '@/graphql/queries';
 import { CREATE_ASSIGNMENT, UPDATE_ASSIGNMENT_FEEDBACK, EVALUATE_ASSIGNMENT_RESPONSE } from '@/graphql/mutations';
@@ -8,6 +8,23 @@ import { CREATE_ASSIGNMENT, UPDATE_ASSIGNMENT_FEEDBACK, EVALUATE_ASSIGNMENT_RESP
 import type { Child, Assignment, Question, Difficulty, AssignmentStatus, AnswerEvaluation, AssignmentResponse } from '@/types';
 
 type AnswerMap = Record<`${string}-${number}`, string>;
+
+// --- GraphQL Mutation Definition ---
+// Defining the mutation here ensures it's available to the component.
+const CREATE_CHILD = gql`
+  mutation CreateChildProfile(
+    $name: String!
+    $age: Int!
+    $username: String!
+    $password: String!
+  ) {
+    createChildProfile(name: $name, age: $age, username: $username, password: $password) {
+      id
+      name
+      age
+    }
+  }
+`;
 
 // --- SVG Icon Components ---
 const Icons = {
@@ -31,7 +48,96 @@ const Icons = {
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
         </svg>
     ),
+    Eye: (props: SVGProps<SVGSVGElement>) => (
+        <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+    ),
+    EyeSlash: (props: SVGProps<SVGSVGElement>) => (
+        <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L6.228 6.228" />
+        </svg>
+    ),
 };
+
+// --- Add Child Modal Component ---
+interface AddChildFormProps {
+    onClose: () => void;
+    onChildAdded: () => void;
+}
+
+const AddChildForm: FC<AddChildFormProps> = ({ onClose, onChildAdded }) => {
+    const [name, setName] = useState('');
+    const [age, setAge] = useState('');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+
+    const [createChildProfile, { loading, error }] = useMutation(CREATE_CHILD);
+
+    const handleSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        setSuccessMessage('');
+        try {
+            const { data } = await createChildProfile({
+                variables: { name, age: parseInt(age, 10), username, password },
+            });
+            setSuccessMessage(`Successfully created profile for ${data.createChildProfile.name}!`);
+            onChildAdded(); // Refetch children list
+            setTimeout(() => {
+                onClose(); // Close modal after a short delay
+            }, 1500);
+        } catch (err) {
+            console.error('Error creating child profile:', err);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="relative w-full max-w-md p-8 space-y-6 bg-white rounded-2xl shadow-xl">
+                <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+                <h2 className="text-3xl font-bold text-center text-gray-800">Create Child Profile</h2>
+                <p className="text-center text-gray-500">Add a new profile for your child to get started.</p>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div>
+                        <label htmlFor="name" className="text-sm font-semibold text-gray-600 block">Child's Name</label>
+                        <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Jane Doe" required className="w-full px-4 py-2 mt-2 text-base text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label htmlFor="age" className="text-sm font-semibold text-gray-600 block">Age</label>
+                        <input id="age" type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="e.g., 8" required className="w-full px-4 py-2 mt-2 text-base text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label htmlFor="username" className="text-sm font-semibold text-gray-600 block">Username</label>
+                        <input id="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Create a unique username" required className="w-full px-4 py-2 mt-2 text-base text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label htmlFor="password" className="text-sm font-semibold text-gray-600 block">Password</label>
+                        <div className="relative">
+                            <input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a secure password" required className="w-full px-4 py-2 mt-2 text-base text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center px-4 text-gray-600">
+                                {showPassword ? <Icons.EyeSlash className="w-5 h-5" /> : <Icons.Eye className="w-5 h-5" />}
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <button type="submit" disabled={loading} className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed">
+                            {loading ? <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : 'Create Profile'}
+                        </button>
+                    </div>
+                    {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert"><strong className="font-bold">Oops! </strong><span className="block sm:inline">{error.message}</span></div>}
+                    {successMessage && <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg relative" role="alert"><strong className="font-bold">Success! </strong><span className="block sm:inline">{successMessage}</span></div>}
+                </form>
+            </div>
+        </div>
+    );
+};
+
 
 // --- Main Page Component ---
 export default function ParentDashboardPage() {
@@ -39,9 +145,10 @@ export default function ParentDashboardPage() {
     const [selectedChild, setSelectedChild] = useState<Child | null>(null);
     const [assignmentToEvaluate, setAssignmentToEvaluate] = useState<Assignment | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isAddChildModalOpen, setIsAddChildModalOpen] = useState(false);
 
     // --- Data Fetching ---
-    const { data: childrenData, loading: childrenLoading, error: childrenError } = useQuery<{ getMyChildren: Child[] }>(GET_CHILDREN);
+    const { data: childrenData, loading: childrenLoading, error: childrenError, refetch: refetchChildren } = useQuery<{ getMyChildren: Child[] }>(GET_CHILDREN);
     const { data: assignmentsData, refetch: refetchAssignments, loading: assignmentsLoading } = useQuery<{ getAssignmentsForChild: Assignment[] }>(GET_ASSIGNMENTS_FOR_CHILD, {
         variables: { childId: selectedChild?.id || '' },
         skip: !selectedChild,
@@ -55,7 +162,6 @@ export default function ParentDashboardPage() {
     const [questions, setQuestions] = useState<Question[]>([{ type: 'EXPLAIN', prompt: '', options: [], answer: '' }]);
     const [currentEvaluation, setCurrentEvaluation] = useState<AnswerEvaluation[]>([]);
     const [overallFeedback, setOverallFeedback] = useState('');
-    const [answers, setAnswers] = useState<AnswerMap>({});
     
     // --- Mutations ---
     const [createAssignment, { loading: createLoading }] = useMutation(CREATE_ASSIGNMENT);
@@ -179,76 +285,96 @@ export default function ParentDashboardPage() {
     if (childrenError) return <div className="flex h-screen items-center justify-center bg-slate-50 text-red-500"><p>Could not load children data.</p></div>;
 
     return (
-        <div className="min-h-screen w-full lg:grid lg:grid-cols-[280px_1fr]">
-            {/* --- Sidebar --- */}
-            <aside className="hidden lg:flex flex-col bg-slate-50 border-r border-slate-200 p-6">
-                <div className="flex items-center gap-3 mb-10">
-                    <div className="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-lg">
-                        <Icons.Family className="h-6 w-6" />
-                    </div>
-                    <h2 className="text-xl font-bold text-gray-800">Family Hub</h2>
-                </div>
-                <nav className="flex-grow">
-                    <h3 className="px-3 text-xs font-semibold uppercase text-gray-500 mb-2">Children</h3>
-                    <ul className="space-y-1">
-                        {childrenData?.getMyChildren?.map((child: Child) => (
-                            <li key={child.id}>
-                                <button
-                                    onClick={() => handleSelectChild(child)}
-                                    className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${selectedChild?.id === child.id ? 'bg-blue-600 text-white' : 'hover:bg-blue-100 text-gray-700'}`}
-                                >
-                                    <Icons.User className="h-5 w-5" />
-                                    {child.name}
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                </nav>
-            </aside>
-
-            {/* --- Main Content --- */}
-            <main className="flex-1 bg-white p-6 sm:p-8 lg:p-10">
-                {/* --- Mobile Header --- */}
-                <header className="lg:hidden mb-8">
-                    <div className="flex items-center justify-between mb-4">
+        <>
+            <div className="min-h-screen w-full lg:grid lg:grid-cols-[280px_1fr]">
+                {/* --- Sidebar --- */}
+                <aside className="hidden lg:flex flex-col bg-slate-50 border-r border-slate-200 p-6">
+                    <div className="flex items-center gap-3 mb-10">
+                        <div className="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-lg">
+                            <Icons.Family className="h-6 w-6" />
+                        </div>
                         <h2 className="text-xl font-bold text-gray-800">Family Hub</h2>
-                        <button 
-                            onClick={() => handleCreateNew()} 
-                            className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 text-sm"
-                        >
-                            <Icons.Plus className="h-4 w-4" /> New
-                        </button>
                     </div>
-                    <div className="relative">
-                        <button 
-                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                            className="w-full flex items-center justify-between rounded-lg bg-slate-100 px-4 py-3 text-left font-semibold text-gray-700"
-                        >
-                            <span>{selectedChild ? selectedChild.name : 'Select a Child'}</span>
-                            <svg className={`h-5 w-5 transition-transform ${isMobileMenuOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                        </button>
-                        {isMobileMenuOpen && (
-                            <div className="absolute top-full left-0 mt-2 w-full bg-white rounded-lg shadow-xl z-10 border border-slate-200">
-                                {childrenData?.getMyChildren?.map((child: Child) => (
+                    <nav className="flex-grow flex flex-col">
+                        <h3 className="px-3 text-xs font-semibold uppercase text-gray-500 mb-2">Children</h3>
+                        <ul className="space-y-1 flex-grow">
+                            {childrenData?.getMyChildren?.map((child: Child) => (
+                                <li key={child.id}>
                                     <button
-                                        key={child.id}
                                         onClick={() => handleSelectChild(child)}
-                                        className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-slate-50"
+                                        className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${selectedChild?.id === child.id ? 'bg-blue-600 text-white' : 'hover:bg-blue-100 text-gray-700'}`}
                                     >
-                                        <Icons.User className="h-5 w-5 text-gray-500" />
+                                        <Icons.User className="h-5 w-5" />
                                         {child.name}
                                     </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </header>
+                                </li>
+                            ))}
+                        </ul>
+                        <button 
+                            onClick={() => setIsAddChildModalOpen(true)}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200 hover:border-slate-400 mt-4"
+                        >
+                            <Icons.Plus className="h-5 w-5" />
+                            Add Child
+                        </button>
+                    </nav>
+                </aside>
 
-                {view === 'dashboard' && <DashboardView selectedChild={selectedChild} assignmentsData={assignmentsData} assignmentsLoading={assignmentsLoading} onCreateNew={handleCreateNew} onEvaluate={handleEvaluateClick} />}
-                {view === 'create' && <CreateAssignmentView onBack={() => setView('dashboard')} onSubmit={handleCreateSubmit} loading={createLoading} title={title} setTitle={setTitle} description={description} setDescription={setDescription} difficulty={difficulty} setDifficulty={setDifficulty} questions={questions} handleQuestionChange={handleQuestionChange} handleRemoveQuestion={handleRemoveQuestion} handleAddQuestion={handleAddQuestion} handleOptionChange={handleOptionChange} handleRemoveOption={handleRemoveOption} handleAddOption={handleAddOption} />}
-                {view === 'evaluate' && assignmentToEvaluate && <EvaluationView assignment={assignmentToEvaluate} onBack={() => setView('dashboard')} onSubmit={handleEvaluateSubmit} loading={evaluateLoading || feedbackLoading} currentEvaluation={currentEvaluation} setCurrentEvaluation={setCurrentEvaluation} overallFeedback={overallFeedback} setOverallFeedback={setOverallFeedback} />}
-            </main>
-        </div>
+                {/* --- Main Content --- */}
+                <main className="flex-1 bg-white p-6 sm:p-8 lg:p-10">
+                    {/* --- Mobile Header --- */}
+                    <header className="lg:hidden mb-8">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xl font-bold text-gray-800">Family Hub</h2>
+                            <button 
+                                onClick={() => handleCreateNew()} 
+                                className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 text-sm"
+                            >
+                                <Icons.Plus className="h-4 w-4" /> New
+                            </button>
+                        </div>
+                        <div className="relative">
+                            <button 
+                                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                                className="w-full flex items-center justify-between rounded-lg bg-slate-100 px-4 py-3 text-left font-semibold text-gray-700"
+                            >
+                                <span>{selectedChild ? selectedChild.name : 'Select a Child'}</span>
+                                <svg className={`h-5 w-5 transition-transform ${isMobileMenuOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+                            {isMobileMenuOpen && (
+                                <div className="absolute top-full left-0 mt-2 w-full bg-white rounded-lg shadow-xl z-10 border border-slate-200">
+                                    {childrenData?.getMyChildren?.map((child: Child) => (
+                                        <button
+                                            key={child.id}
+                                            onClick={() => handleSelectChild(child)}
+                                            className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-slate-50"
+                                        >
+                                            <Icons.User className="h-5 w-5 text-gray-500" />
+                                            {child.name}
+                                        </button>
+                                    ))}
+                                     <button 
+                                        onClick={() => {
+                                            setIsAddChildModalOpen(true);
+                                            setIsMobileMenuOpen(false);
+                                        }}
+                                        className="w-full text-left px-4 py-3 flex items-center gap-3 text-blue-600 font-semibold hover:bg-slate-50 border-t border-slate-100"
+                                    >
+                                        <Icons.Plus className="h-5 w-5" />
+                                        Add New Child
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </header>
+
+                    {view === 'dashboard' && <DashboardView selectedChild={selectedChild} assignmentsData={assignmentsData} assignmentsLoading={assignmentsLoading} onCreateNew={handleCreateNew} onEvaluate={handleEvaluateClick} />}
+                    {view === 'create' && <CreateAssignmentView onBack={() => setView('dashboard')} onSubmit={handleCreateSubmit} loading={createLoading} title={title} setTitle={setTitle} description={description} setDescription={setDescription} difficulty={difficulty} setDifficulty={setDifficulty} questions={questions} handleQuestionChange={handleQuestionChange} handleRemoveQuestion={handleRemoveQuestion} handleAddQuestion={handleAddQuestion} handleOptionChange={handleOptionChange} handleRemoveOption={handleRemoveOption} handleAddOption={handleAddOption} />}
+                    {view === 'evaluate' && assignmentToEvaluate && <EvaluationView assignment={assignmentToEvaluate} onBack={() => setView('dashboard')} onSubmit={handleEvaluateSubmit} loading={evaluateLoading || feedbackLoading} currentEvaluation={currentEvaluation} setCurrentEvaluation={setCurrentEvaluation} overallFeedback={overallFeedback} setOverallFeedback={setOverallFeedback} />}
+                </main>
+            </div>
+            {isAddChildModalOpen && <AddChildForm onClose={() => setIsAddChildModalOpen(false)} onChildAdded={refetchChildren} />}
+        </>
     );
 }
 
@@ -377,11 +503,11 @@ const DashboardView: FC<DashboardViewProps> = ({ selectedChild, assignmentsData,
     
     if (!selectedChild) {
         return (
-            <div className="flex h-full items-center justify-center text-center bg-slate-50 rounded-xl">
+            <div className="flex h-full items-center justify-center text-center bg-slate-50 rounded-xl p-8">
                 <div>
                     <Icons.Family className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-700">Select a child</h3>
-                    <p className="text-gray-500 mt-1">Choose a child from the sidebar to view their assignments.</p>
+                    <h3 className="text-xl font-semibold text-gray-700">Welcome to your Family Hub!</h3>
+                    <p className="text-gray-500 mt-1">Select a child from the sidebar, or add a new child to get started.</p>
                 </div>
             </div>
         );
